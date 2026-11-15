@@ -43,7 +43,7 @@
     <!-- How far to believe it: an exact check or a run proves it; the model's claim that passed its checks is likely; the rest is for a person to judge. -->
     {#if f.doubt}<span class="tag" title={f.doubt}>to judge</span>
     {:else if f.source === 'llm'}<span class="tag" title="Found by the model; it quoted the code and the claim passed Codist's checks">likely</span>
-    {:else}<span class="tag good" title={f.ref === 'behaviour-change' ? 'Shown by running the code before and after this commit' : 'Found by an exact check of the code'}>proven</span>{/if}
+    {:else}<span class="tag good" title={f.ref === 'behaviour-change' ? 'Shown by running the code before and after this commit' : f.ref?.startsWith('learned-') ? 'Found by a check Codist learned from an earlier fix in this repository' : 'Found by an exact check of the code'}>{f.ref?.startsWith('learned-') ? 'learned' : 'proven'}</span>{/if}
     <CopyButton title="Copy this finding" text={() => [`[${f.severity}] ${f.title}`, `${f.path}${f.line ? ':' + f.line : ''}`, f.detail, f.suggestion ? `Recommendation: ${f.suggestion}` : ''].filter(Boolean).join('\n')} />
     {#if f.ignored}<span class="tag">ignored</span>
     {:else if f.state === 'resolved'}<span class="tag good" title={f.fixedIn ? `Fixed in ${f.fixedIn.slice(0, 7)} by ${f.fixedBy}` : 'Fixed in the working tree, not committed yet'}>✓ {f.uncommitted ? 'fixed locally' : 'fixed'}</span>
