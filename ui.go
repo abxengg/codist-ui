@@ -42,3 +42,12 @@ func serve(fsys fs.FS) http.Handler {
 		http.Error(w, "This build has no interface. Run npm run build in codist-ui.", http.StatusNotFound)
 	})
 }
+
+// Features answers which parts of the interface this version of Codist has, so the pages hide the rest: Review,
+// Graph, Incidents, Repository and Activity are there.
+func Features(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"menus":{"review":true,"repo":true,"incidents":true,"branches":false,"mine":false,"team":false,` +
+		`"release":false,"activity":true,"memory":false},"panels":{"issues":true,"commit":true,"code":true,"ask":false},` +
+		`"features":{"explorer":true,"branchGraph":false,"branchSwitcher":true,"fix":true,"reword":false,"localPlan":false},"sources":[]}`))
+}

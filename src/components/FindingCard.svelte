@@ -25,6 +25,8 @@
   const ref = $derived(members.find((m) => m.ref)?.ref);
   const judge = (verdict: '' | 'useful' | 'wrong') => void judgeFinding(members, verdict);
   const name = (p: string) => p.slice(p.lastIndexOf('/') + 1);
+  // Every check this claim went through in the model review, in order; empty for code checks.
+  const steps = $derived(app.detail?.trail?.steps?.[f.issueId ?? ''] ?? []);
 
   function open(m: FindingWithPath, e?: MouseEvent) {
     e?.stopPropagation();
@@ -38,7 +40,10 @@
     <svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M3 1.5 7 5 3 8.5Z"/></svg>
     <span class="sev {f.severity}">{f.severity}</span>
     <span class="title">{f.title}</span>
-    {#if f.doubt}<span class="tag" title={f.doubt}>unconfirmed</span>{/if}
+    <!-- How far to believe it: an exact check or a run proves it; the model's claim that passed its checks is likely; the rest is for a person to judge. -->
+    {#if f.doubt}<span class="tag" title={f.doubt}>to judge</span>
+    {:else if f.source === 'llm'}<span class="tag" title="Found by the model; it quoted the code and the claim passed Codist's checks">likely</span>
+    {:else}<span class="tag good" title={f.ref === 'behaviour-change' ? 'Shown by running the code before and after this commit' : 'Found by an exact check of the code'}>proven</span>{/if}
     <CopyButton title="Copy this finding" text={() => [`[${f.severity}] ${f.title}`, `${f.path}${f.line ? ':' + f.line : ''}`, f.detail, f.suggestion ? `Recommendation: ${f.suggestion}` : ''].filter(Boolean).join('\n')} />
     {#if f.ignored}<span class="tag">ignored</span>
     {:else if f.state === 'resolved'}<span class="tag good" title={f.fixedIn ? `Fixed in ${f.fixedIn.slice(0, 7)} by ${f.fixedBy}` : 'Fixed in the working tree, not committed yet'}>✓ {f.uncommitted ? 'fixed locally' : 'fixed'}</span>
@@ -52,7 +57,19 @@
   </button>
   {#if expanded}
     <div class="body" transition:accordion>
-      {#if f.doubt}<p class="muted">Unconfirmed: {f.doubt}</p>{/if}
+      {#if f.doubt}<p class="muted">To judge: {f.doubt}</p>{/if}
+      {#if steps.length}
+        <div class="how">
+          <span class="howlabel">How Codist decided</span>
+          <ol>
+            {#each steps as s, i (i)}
+              <li class:good={/^(passed|kept|confirmed|sided with the claim)$/.test(s.result)} class:bad={/refuted|contradicted|demoted|note|sided with the code|without proof|guessing|could not/.test(s.result)}>
+                <b>{s.step}</b> <span class="res">{s.result}</span>{#if s.detail}<span class="faint"> · {s.detail}</span>{/if}
+              </li>
+            {/each}
+          </ol>
+        </div>
+      {/if}
       {#if lead.detail}<p>{lead.detail}</p>{/if}
       {#if many}
         <ul class="locs">
@@ -137,4 +154,11 @@
   .root { margin-left: auto; font-size: 10.5px; color: var(--text-2); white-space: nowrap; }
   .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 11.5px; }
   .meta { margin-left: 4px; }
+  .how { margin: 8px 0; padding: 8px 10px; border-left: 2px solid var(--border); background: var(--surface-2); border-radius: var(--r); }
+  .howlabel { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3); }
+  .how ol { margin: 4px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.5; }
+  .how li { margin: 2px 0; overflow-wrap: anywhere; }
+  .how li .res { color: var(--text-2); }
+  .how li.good .res { color: var(--good); }
+  .how li.bad .res { color: var(--warn); }
 </style>

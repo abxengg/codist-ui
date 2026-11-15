@@ -24,7 +24,7 @@
     <span class="label">Behaviour</span>
     {#if b.status === 'done'}
       {#if b.differ}
-        <span class="warnc">{b.differ} call{b.differ > 1 ? 's' : ''} now behave differently</span>
+        <span class="warnc">{b.differ} call{b.differ > 1 ? 's' : ''} now behave differently{#if b.unintended}, {b.unintended} not covered by the commit message{/if}</span>
       {:else}
         <span class="good">No difference in {b.ran} call{b.ran === 1 ? '' : 's'}</span>
       {/if}
@@ -53,6 +53,12 @@
           <div class="call mono">{d.call}</div>
           <div class="row"><span class="tag before">before</span><span class="mono">{d.old}</span></div>
           <div class="row"><span class="tag after">after</span><span class="mono">{d.new}</span></div>
+          {#if d.intent}
+            <div class="intent" class:un={d.intent === 'unintended'}>
+              <b>{d.intent === 'intended' ? 'The commit message covers this' : d.intent === 'unintended' ? 'The commit message does not cover this' : 'Not clear from the commit message'}</b>{#if d.why}: {d.why}{/if}
+              <span class="faint">(the model's reading)</span>
+            </div>
+          {/if}
         </div>
       {/each}
       {#if (b.differ ?? 0) > (b.differences?.length ?? 0)}<p class="faint">and {(b.differ ?? 0) - (b.differences?.length ?? 0)} more like these.</p>{/if}
@@ -77,5 +83,7 @@
   .row .mono { overflow-wrap: anywhere; color: var(--text-2); }
   .tag { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3); line-height: 18px; }
   .tag.after { color: var(--warn); }
+  .intent { margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--text-2); }
+  .intent.un b { color: var(--warn); }
   .link { padding: 0; border: 0; background: none; font-size: 12px; color: var(--accent-text); }
 </style>

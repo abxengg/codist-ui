@@ -5,18 +5,13 @@
   import TopBar from './components/TopBar.svelte';
   import Sidebar from './components/Sidebar.svelte';
   import LeftDock from './components/LeftDock.svelte';
-  import BranchGraph from './components/BranchGraph.svelte';
   import RepoView from './components/RepoView.svelte';
-  import BranchesView from './components/BranchesView.svelte';
-  import PeopleView from './components/PeopleView.svelte';
   import ActivityView from './components/ActivityView.svelte';
-  import MemoryView from './components/MemoryView.svelte';
   import DiffReview from './components/DiffReview.svelte';
   import Panel from './components/Panel.svelte';
   import Toasts from './components/Toasts.svelte';
   import FixDialog from './components/FixDialog.svelte';
   import IncidentsView from './components/IncidentsView.svelte';
-  import ReleaseView from './components/ReleaseView.svelte';
 
   let dragging = $state<'side' | 'panel' | null>(null);
 
@@ -123,19 +118,11 @@
   {/if}
   {#if app.mode === 'incidents'}
     <IncidentsView />
-  {:else if ['repo', 'branches', 'mine', 'team', 'release'].includes(app.mode)}
-    <!-- These describe the followed branch, so they load again when it changes. -->
-    {#key app.status?.branch}
-      {#if app.mode === 'release'}<ReleaseView />
-      {:else if app.mode === 'repo'}<RepoView />
-      {:else if app.mode === 'branches'}<BranchesView />
-      {:else if app.mode === 'mine'}<PeopleView mode="mine" />
-      {:else}<PeopleView mode="team" />{/if}
-    {/key}
+  {:else if app.mode === 'repo'}
+    <!-- It describes the followed branch, so it loads again when that changes. -->
+    {#key app.status?.branch}<RepoView />{/key}
   {:else if app.mode === 'activity'}
     <ActivityView />
-  {:else if app.mode === 'memory'}
-    <MemoryView />
   {:else}
   <main
     class="layout"
@@ -150,8 +137,6 @@
     {/if}
     {#if app.mode === 'review'}
       <DiffReview />
-    {:else if app.centre === 'branches'}
-      <BranchGraph />
     {:else}
       <!-- The graph library is large, so it loads only when this screen opens. -->
       {#await import('./components/GraphView.svelte')}

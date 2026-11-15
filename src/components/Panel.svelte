@@ -7,7 +7,6 @@
   import CodeTab from './CodeTab.svelte';
   import DiffTab from './DiffTab.svelte';
   import TypeTab from './TypeTab.svelte';
-  import AskTab from './AskTab.svelte';
 
   const open = $derived((app.issueList?.issues ?? []).filter((i) => i.state === 'open' && (!i.group || i.groupRoot)).length);
   const hot = $derived((app.issueList?.openBySeverity.critical ?? 0) + (app.issueList?.openBySeverity.high ?? 0) > 0);
@@ -55,8 +54,7 @@
     {:else if app.tab === 'review'}<ReviewTab />
     {:else if app.tab === 'code'}<CodeTab />
     {:else if app.tab === 'diff'}<DiffTab />
-    {:else if app.tab === 'type'}<TypeTab />
-    {:else}<AskTab />{/if}
+    {:else}<TypeTab />{/if}
   </div>
 </section>
 

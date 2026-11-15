@@ -149,6 +149,16 @@
       </tbody></table></div>
     </section>
 
+    {#if r.outcomes?.length}
+      <section class="pcard">
+        <h2>What became of the findings</h2>
+        <p class="hint">For each code check and for the model: how many issues it raised, how many a later commit fixed, and how people judged them. <b>Acted on</b> is the share fixed, closed or marked useful among those decided; issues still open and unjudged do not count yet. A check nobody acts on is noise.</p>
+        <div class="tscroll" tabindex="0" role="region" aria-label="What became of the findings"><table class="tbl"><thead><tr><th>Found by</th><th class="num">Issues</th><th class="num">Fixed by a commit</th><th class="num">Closed by hand</th><th class="num">Marked useful</th><th class="num">Marked wrong</th><th class="num">Open</th><th class="num">Acted on</th></tr></thead><tbody>
+          {#each r.outcomes as o}<tr><td class="mono small">{o.source === 'model' ? 'AI model' : o.source}</td><td class="num">{o.found}</td><td class="num">{o.fixed}</td><td class="num">{o.byHand}</td><td class="num">{o.useful}</td><td class="num">{o.wrong}</td><td class="num">{o.open}</td><td class="num">{o.actedOn < 0 ? '—' : `${Math.round(o.actedOn * 100)}%`}</td></tr>{/each}
+        </tbody></table></div>
+      </section>
+    {/if}
+
     <section class="pcard">
       <h2>Service calls</h2>
       <p class="hint">How services talk to each other through Feign clients. Each row is one client: the service using it, the service it reaches, and the routes it calls.</p>

@@ -277,6 +277,9 @@ export interface BehaviourDifference {
   call: string;
   old: string;
   new: string;
+  /** Whether the commit message says this change was meant, as the model reads it. Absent without a model. */
+  intent?: 'intended' | 'unintended' | 'unclear';
+  why?: string;
 }
 
 /** What running the changed methods before and after a commit showed. Null when the setting is off. */
@@ -292,15 +295,32 @@ export interface Behaviour {
   flaky?: number;
   stateOnly?: number;
   nullOnly?: number;
+  /** Differences the commit message does not cover, when the model was asked. */
+  unintended?: number;
   differences?: BehaviourDifference[];
   notes?: string[];
   took?: number;
+}
+
+/** What was decided for one changed file: whether the model read it, why, and who decided. */
+export interface FilePlan { path: string; decision: 'read' | 'skipped'; why: string; by: 'codist' | 'model' | 'you' }
+
+/** What happened in a commit's model review: what the model understood, what Codist threw away, and how each claim was checked. */
+export interface Trail {
+  files: { path: string; reading?: string; change?: string; effect?: string; expected?: string; error?: string }[];
+  discarded: { path: string; line: number; title: string; why: string }[];
+  /** By issue id: each check a claim went through, in order. */
+  steps: Record<string, { step: string; result: string; detail?: string }[]>;
 }
 
 export interface Detail {
   analysis: Analysis;
   review: Review | null;
   behaviour?: Behaviour | null;
+  /** The model's reading plan for this commit; null until the model has reviewed it. */
+  plan?: FilePlan[] | null;
+  /** What happened in the model review; null until the model has read the commit. */
+  trail?: Trail | null;
   /** path|line|title -> "instant" (mechanical) or "ready" (prepared by the model). */
   fixes: Record<string, 'instant' | 'ready'>;
   /** Earlier issues this commit fixed. */
@@ -446,6 +466,8 @@ export interface RepoReport {
   costlyTotal: number;
   largest: { Name: string; Node: string; File: string; Lines: number; Members: number }[];
   issues: Record<string, number>; urgency: Record<string, number>; severity: Record<string, number>;
+  /** What became of the issues each check, and the model, raised. actedOn is -1 while nothing is decided. */
+  outcomes?: { source: string; found: number; fixed: number; byHand: number; open: number; useful: number; wrong: number; actedOn: number }[];
 }
 
 export interface BranchReport {

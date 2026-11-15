@@ -393,14 +393,8 @@ async function reloadBranch() {
   if (app.status?.head) await selectCommit(app.status.head);
 }
 
-export async function loadWorking() {
-  try {
-    app.working = await api.working();
-    if (app.scope === 'working' && !app.working.changes.length) app.scope = 'all';
-  } catch {
-    /* remote mirror or not indexed yet */
-  }
-}
+/** This version reviews commits only, so there are no uncommitted changes to load. */
+export async function loadWorking() {}
 
 /** Shows the uncommitted changes in the hub and on the graph. */
 export function showWorking() {
@@ -470,6 +464,16 @@ export async function requestBehaviour(sha: string) {
   try {
     await api.behaviour(sha);
     toast('Running the changed methods');
+  } catch (e) {
+    toast((e as Error).message, 'bad');
+  }
+}
+
+/** Has the model read one file of a commit that its plan skipped. */
+export async function requestFileReview(sha: string, path: string) {
+  try {
+    await api.reviewFile(sha, path);
+    toast(`The model will read ${path.slice(path.lastIndexOf('/') + 1)}`);
   } catch (e) {
     toast((e as Error).message, 'bad');
   }

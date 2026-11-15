@@ -1,11 +1,12 @@
 <script lang="ts">
   import ThinkingOrb from './ThinkingOrb.svelte';
+  import PlanCard from './PlanCard.svelte';
+  import TrailCard from './TrailCard.svelte';
   import { app, loadCommits, openFile, requestReview, selectCommit, selectNode, toast } from '../lib/store.svelte';
   import { ago, SEVERITIES, shortName } from '../lib/theme';
   import FindingCard from './FindingCard.svelte';
   import CommitRef from './CommitRef.svelte';
   import CopyButton from './CopyButton.svelte';
-  import ImpactCard from './ImpactCard.svelte';
   import BehaviourCard from './BehaviourCard.svelte';
   import { api } from '../lib/api';
 
@@ -128,6 +129,8 @@
         · prompt {s.promptVersion}
       </p>
     {/if}
+    {#if d.plan?.length}<PlanCard sha={c.sha} plan={d.plan} />{/if}
+    {#if d.trail}<TrailCard trail={d.trail} />{/if}
     {#if r?.analysers?.length || r?.analysisProblems?.length}
       <p class="checked faint" title={(r.analysisProblems ?? []).join('\n')}>
         Checked by Codist rules, the knowledge base{#each r.analysers ?? [] as t}, {t === 'pmd' ? 'PMD' : 'SpotBugs'}{/each} and the model
@@ -151,8 +154,6 @@
         {/if}
       </section>
     {/if}
-
-    <ImpactCard sha={c.sha} />
 
     <section class="card msg">
       <div class="card-head"><span class="label">Commit message</span><span class="spacer"></span>
