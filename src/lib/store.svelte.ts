@@ -129,6 +129,8 @@ class AppState {
   kind = $state<string | null>(null);
   urgency = $state<string | null>(null);
   change = $state<string | null>(null);
+  /** Show only issues found by the AI model ('llm') or by a code check or a run ('rule'). */
+  foundBy = $state<'llm' | 'rule' | null>(null);
   hubQuery = $state('');
   /** The issue open in the hub's detail view (id of its root). */
   picked = $state<string | null>(null);
@@ -201,7 +203,8 @@ class AppState {
   scoped: Issue[][] = $derived(this.groupsIn(this.issueState));
   /** What the hub lists and the graph highlights. */
   hub: Issue[][] = $derived(this.scoped.filter((g) => (!this.level || g[0].severity === this.level) && (!this.kind || g[0].kind === this.kind) &&
-    (!this.urgency || g[0].urgency === this.urgency) && (!this.change || g[0].change === this.change)))
+    (!this.urgency || g[0].urgency === this.urgency) && (!this.change || g[0].change === this.change) &&
+    (!this.foundBy || g.some((i) => i.source === this.foundBy))))
 
   /** The types and links that pass the graph filters. */
   graphView = $derived.by(() => {

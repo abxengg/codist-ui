@@ -8,10 +8,11 @@
   import type { FindingWithPath, FixRef, Issue, Severity } from '../lib/types';
 
   let filtersOpen = $state(false);
-  const activeFilters = $derived((app.scope !== 'all' ? 1 : 0) + [app.kind, app.urgency, app.change].filter(Boolean).length);
+  const activeFilters = $derived((app.scope !== 'all' ? 1 : 0) + [app.kind, app.urgency, app.change, app.foundBy].filter(Boolean).length);
   function clearFilters() {
     setScope('all');
     app.kind = app.urgency = app.change = null;
+    app.foundBy = null;
   }
   let closing = $state(false);
   let reason = $state('');
@@ -37,6 +38,8 @@
   const kinds = $derived(tally((i) => i.kind));
   const urgencies = $derived(tally((i) => i.urgency));
   const changes = $derived(tally((i) => i.change));
+  // An issue counts for a source when any of its findings came from it: a check and the model can report the same line.
+  const foundBy = $derived((['llm', 'rule'] as const).map((src) => [src, app.scoped.filter((g) => g.some((i) => i.source === src)).length] as const).filter(([, n]) => n));
   const sections = $derived(
     SEVERITIES.map((s) => ({ level: s, groups: app.hub.filter((g) => g[0].severity === s) })).filter((x) => x.groups.length),
   );
@@ -202,6 +205,10 @@
             {#each opts as [v, n]}<option value={v}>{v} ({n})</option>{/each}
           </select>
         {/each}
+        <select aria-label="Found by" value={app.foundBy ?? ''} class:on={!!app.foundBy} onchange={(e) => (app.foundBy = (e.currentTarget.value || null) as typeof app.foundBy)}>
+          <option value="">Found by: all</option>
+          {#each foundBy as [src, n]}<option value={src}>{src === 'llm' ? 'AI model' : 'Code checks'} ({n})</option>{/each}
+        </select>
       </div>
         </div>
       {/if}
