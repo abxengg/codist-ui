@@ -4,6 +4,10 @@ The interface of [Codist](https://github.com/abxengg/codist), in Svelte 5. The b
 embedded by the Go package in this repository, so the Codist binary carries the interface and building Codist needs
 no Node.
 
+Screens: **Review** (commits, diffs with findings beside the lines, how Codist decided each one, the files the model
+read), **Issues** (every open issue, filtered by type, urgency, change and who found it: the AI model or the code
+checks), **Graph**, **Repository**, **Incidents** and **Activity**.
+
 ```bash
 npm install
 npm run dev     # live reload on :5173, with /api sent to Codist on :8080 (CODIST_API to change)
