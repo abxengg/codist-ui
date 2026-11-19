@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Orb from './Orb.svelte';
   import ThinkingOrb from './ThinkingOrb.svelte';
   import { onMount } from 'svelte';
   import { app, loadIncidents, openIncident, toast } from '../lib/store.svelte';
@@ -76,7 +77,7 @@
     {:else if app.incidentError}
       <div class="empty">Could not open this incident: {app.incidentError} <button class="btn secondary sm" onclick={() => openIncident(app.incidentId)}>Try again</button></div>
     {:else if app.incidentId}
-      <div class="empty"><span class="spinner"></span></div>
+      <div class="empty"><Orb mood="reading" size={64} label="Opening the incident" /></div>
     {:else}
       <div class="new">
         <h1>Analyse an incident</h1>

@@ -183,6 +183,6 @@
   }
 
   /* Long words (a full method chain, a path) wrap inside the card instead of running over the code. */
-  .note, .note p, .note li, .wside .note, .ftitle h2, .title h2 { overflow-wrap: anywhere; min-width: 0; }
+  .note, .note p, .note li, .title h2 { overflow-wrap: anywhere; min-width: 0; }
   .left, .right { min-width: 0; }
 </style>

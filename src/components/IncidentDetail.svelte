@@ -1,5 +1,6 @@
 <script lang="ts">
   import ThinkingOrb from './ThinkingOrb.svelte';
+  import Orb from './Orb.svelte';
   import { app, loadIncidents, openFile, openIncident, openProposal, showCommit, selectNode, toast } from '../lib/store.svelte';
   import { api } from '../lib/api';
   import { ago } from '../lib/theme';
@@ -95,6 +96,29 @@
 </script>
 
 <div class="detail">
+  {#if inc.status === 'analysing'}
+    <!-- While the AI works: the orb, and the four real steps, each ticked off as its results arrive. -->
+    {@const steps = [
+      { done: inc.errors.length > 0, label: 'Finding the errors in the logs', got: inc.errors.length ? `${inc.errors.length} found` : '' },
+      { done: inc.locations.length > 0, label: 'Mapping them to the code', got: inc.locations.length ? `${inc.locations.length} places` : '' },
+      { done: inc.suspects.length > 0, label: 'Ranking the commits that could have caused it', got: inc.suspects.length ? `${inc.suspects.length} suspects` : '' },
+      { done: inc.causes.length > 0, label: `Asking ${inc.model || 'the AI'} for the root cause`, got: '' },
+    ]}
+    {@const current = steps.findIndex((x) => !x.done)}
+    <section class="analysing">
+      <Orb mood={current === 3 ? 'writing' : 'reading'} size={120} label="Analysing the incident" />
+      <p class="kick">Analysing the incident</p>
+      <ol class="steps">
+        {#each steps as st, i}
+          <li class:done={st.done} class:now={i === current}>
+            <span class="mark">{#if st.done}✓{:else if i === current}<i></i>{/if}</span>
+            <span>{st.label}</span>{#if st.got}<small>{st.got}</small>{/if}
+          </li>
+        {/each}
+      </ol>
+      <p class="sub">Started {ago(inc.createdAt)}. The evidence below fills in as each step finishes.</p>
+    </section>
+  {/if}
   <header>
     <div class="eyebrow">Incident · {ago(inc.createdAt)} · {occurrences} occurrence{occurrences === 1 ? '' : 's'} in {(inc.logBytes / 1024).toFixed(0)} KB of logs</div>
     <h1>{inc.title}</h1>
@@ -308,4 +332,17 @@
   .report textarea:focus, .rule textarea:focus, .runbook:focus { outline: none; border-color: var(--accent); }
   .report .label { margin-top: 6px; }
   @media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+  .analysing { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 26px 20px 22px; border-radius: 18px;
+    background: var(--glass); border: 1px solid rgba(139, 124, 246, 0.35); box-shadow: var(--elev-2), var(--glow-soft); }
+  .kick { margin: 12px 0 14px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; text-align: left; }
+  .steps li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-3); transition: color 0.3s; }
+  .steps li.done { color: var(--text-2); } .steps li.now { color: var(--text); }
+  .steps small { color: var(--text-3); font-size: 11.5px; }
+  .mark { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--border-strong); font-size: 11px; flex-shrink: 0; }
+  .done .mark { border-color: var(--good); color: var(--good); box-shadow: 0 0 10px -2px var(--good); }
+  .now .mark { border-color: var(--accent); }
+  .now .mark i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: beat 1s ease-in-out infinite; }
+  @keyframes beat { 50% { transform: scale(1.6); opacity: 0.6; } }
+  .analysing .sub { margin: 14px 0 0; font-size: 12px; color: var(--text-3); }
 </style>

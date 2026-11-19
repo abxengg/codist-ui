@@ -28,10 +28,13 @@
 </script>
 
 <div class="now">
-  <div class="brandbar"><b>Codist</b><span>{app.status?.repo ?? ""}</span>{#if app.featureOn('branchSwitcher')}<BranchPicker />{:else if app.status?.branch}<span>· {app.status.branch}</span>{/if}</div>
+  <div class="brandbar"><span class="repo">{app.status?.repo ?? ""}</span>{#if app.featureOn('branchSwitcher')}<BranchPicker />{:else if app.status?.branch}<span>· {app.status.branch}</span>{/if}</div>
   <section class="hero">
     <div class="light" aria-hidden="true"></div>
-    <Orb mood={live.mood} size={170} label={live.sentence} />
+    <!-- The name, with the AI's orb as its "o". -->
+    <div class="wordmark" aria-label="Codist">
+      <span aria-hidden="true">C</span><span class="o"><Orb mood={live.mood} size={66} label={live.sentence} /></span><span aria-hidden="true">dist</span>
+    </div>
     <h1>{live.sentence}</h1>
     <p class="sub">
       {#if live.call?.status === 'running'}
@@ -94,7 +97,7 @@
 <style>
   .now { flex: 1; min-height: 0; overflow: auto; padding: 0 clamp(16px, 4vw, 56px) 48px; }
   .brandbar { display: flex; align-items: center; gap: 10px; padding: 20px 0 0; max-width: 1280px; margin: 0 auto; }
-  .brandbar b { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  .brandbar .repo { font-size: 13px; font-weight: 600; color: var(--text-2); }
   .brandbar span { font-size: 12.5px; color: var(--text-3); }
   .hero { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 36px 0 28px; }
   /* The orb as a light source: a soft pool of its colour behind it, breathing slowly. */
@@ -104,7 +107,10 @@
   @keyframes breathe { 50% { opacity: 0.65; transform: translateX(-50%) scale(0.96); } }
   @media (prefers-reduced-motion: reduce) { .light { animation: none; } }
   .hero > :global(*:not(.light)) { position: relative; }
-  h1 { position: relative; margin: 18px 0 6px; font-size: clamp(22px, 2.6vw, 30px); font-weight: 600; letter-spacing: -0.02em; }
+  .wordmark { display: flex; align-items: center; font-size: clamp(64px, 8vw, 104px); font-weight: 650; letter-spacing: -0.05em; line-height: 1; color: var(--text); margin-top: 8px; }
+  .wordmark .o { display: inline-flex; align-items: center; justify-content: center; width: 0.66em; height: 0.66em; margin: 0.16em 0.03em 0 0.05em; }
+  .wordmark .o :global(.orb) { width: 100% !important; height: 100% !important; }
+  h1 { position: relative; margin: 22px 0 6px; font-size: clamp(17px, 1.8vw, 21px); font-weight: 500; letter-spacing: -0.01em; color: var(--text-2); }
   .sub { position: relative; margin: 0; color: var(--text-2); font-size: 14px; }
   .sub b { color: var(--text); font-weight: 600; }
   .stats { position: relative; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 26px; }

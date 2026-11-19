@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Wires from './Wires.svelte';
+  let cmap = $state<HTMLElement>();
+  import Orb from './Orb.svelte';
   import BranchPicker from './BranchPicker.svelte';
   import { onMount } from 'svelte';
   import { app, openFile, reveal, selectNode } from '../lib/store.svelte';
@@ -62,7 +65,7 @@
     <p>The repository as it is on {r?.branch ?? '…'}: its services, APIs, who works on what, where it changes and what it costs.</p>
   </header>
   {#if error}<div class="pcard">Could not analyse the repository: {error}</div>
-  {:else if !r}<div class="empty"><span class="spinner"></span></div>
+  {:else if !r}<div class="empty"><Orb mood="reading" size={64} label="Reading the repository" /></div>
   {:else}
     <div class="cards">
       <div class="stat"><b>{r.services.filter((s) => s.kind === 'service').length}</b><span>services</span></div>
@@ -74,6 +77,38 @@
       <div class="stat"><b>{r.commits}</b><span>commits</span></div>
       <div class="stat"><b>{r.contributors.length}</b><span>people</span></div>
     </div>
+
+    <!-- How the services connect: a card each, HTTP calls between them flowing, shared libraries underneath. -->
+    <section class="pcard connect">
+      <h2>How it connects</h2>
+      <div class="cmap" bind:this={cmap}>
+        <Wires root={cmap} links={[
+          ...r.calls.map((c) => ({ from: 'svc:' + c.from, to: 'svc:' + c.to, busy: true, tone: '242,123,182', label: c.routes.length ? `${c.routes.length} route${c.routes.length === 1 ? '' : 's'}` : 'HTTP' })),
+          ...r.services.flatMap((sv) => (sv.usesLibs ?? []).map((l) => ({ from: 'svc:' + sv.name, to: 'svc:' + l, tone: '150,150,170' }))),
+        ].filter((l, i, all) => all.findIndex((x) => x.from === l.from && x.to === l.to) === i)} />
+        <div class="crow">
+          {#each r.services.filter((sv) => sv.kind !== 'library') as sv (sv.name)}
+            {@const open = Object.values(sv.open).reduce((a, b) => a + (b ?? 0), 0)}
+            <div class="svc" data-node={'svc:' + sv.name} class:hot={open > 0}>
+              <div class="sh"><b>{sv.name}</b>{#if sv.port}<span class="mono">:{sv.port}</span>{/if}</div>
+              <div class="sn"><span><i>{sv.types}</i> classes</span><span><i>{sv.endpoints}</i> endpoints</span><span><i>{sv.lines.toLocaleString()}</i> lines</span></div>
+              <div class="sf">{#if open}{#each SEVERITIES as sv2}{#if sv.open[sv2]}<span class="sev {sv2}">{sv.open[sv2]} {sv2}</span>{/if}{/each}{:else}<span class="calm">no open issues</span>{/if}{#if sv.tests === 0}<span class="notest">no tests</span>{/if}</div>
+            </div>
+          {/each}
+        </div>
+        {#if r.services.some((sv) => sv.kind === 'library')}
+          <div class="crow libs">
+            {#each r.services.filter((sv) => sv.kind === 'library') as sv (sv.name)}
+              <div class="svc lib" data-node={'svc:' + sv.name}>
+                <div class="sh"><b>{sv.name}</b><span>shared library</span></div>
+                <div class="sn"><span><i>{sv.types}</i> classes</span><span><i>{sv.lines.toLocaleString()}</i> lines</span></div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+      <p class="hint">Pink lines are HTTP calls between services (Feign), flowing from caller to the one called; grey lines go to the shared code a service uses.</p>
+    </section>
 
     <section class="pcard">
       <h2>Services</h2>
@@ -184,6 +219,16 @@
 </div>
 
 <style>
+  .cmap { position: relative; display: flex; flex-direction: column; gap: 72px; padding: 10px 0 6px; }
+  .crow { display: flex; flex-wrap: wrap; justify-content: center; gap: 64px 56px; position: relative; z-index: 1; }
+  .svc { min-width: 180px; max-width: 240px; padding: 12px 14px; border-radius: 14px; background: var(--glass-strong); border: 1px solid var(--border); box-shadow: var(--elev-1); }
+  .svc.hot { border-color: color-mix(in srgb, var(--sev-high) 40%, var(--border)); box-shadow: var(--elev-1), 0 0 36px -16px color-mix(in srgb, var(--sev-high) 60%, transparent); }
+  .svc.lib { min-width: 160px; background: var(--surface-2); }
+  .sh { display: flex; align-items: baseline; gap: 6px; } .sh b { font-size: 13.5px; } .sh span { font-size: 11px; color: var(--text-3); }
+  .sn { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; font-size: 11px; color: var(--text-3); } .sn i { font-style: normal; color: var(--text); font-weight: 600; }
+  .sf { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; font-size: 11px; }
+  .calm { color: var(--good); } .notest { color: var(--warn); }
+  .connect .hint { margin: 10px 0 0; }
   .titlerow { display: flex; align-items: center; gap: 12px; }
   .titlerow h1 { margin: 0 0 3px; }
   .small { font-size: 11.5px; }

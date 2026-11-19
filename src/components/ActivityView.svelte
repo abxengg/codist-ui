@@ -3,6 +3,8 @@
   import { fade, fly, scale } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import Orb from './Orb.svelte';
+  import Wires from './Wires.svelte';
+  import { live } from '../lib/live.svelte';
   import { tokenize, plain, type Line } from '../lib/highlight';
   import { app, openFile, openIncident, showCommit } from '../lib/store.svelte';
   import { api } from '../lib/api';
@@ -106,6 +108,31 @@
   let openSec = $state<Record<number, boolean>>({});
   $effect(() => { void picked?.id; openSec = {}; });
   const ease = { easing: cubicOut };
+
+  // The pipeline: what each stage holds right now, and which links carry work.
+  let flow = $state<HTMLElement>();
+  const lane = (k: string) => lanes.find((l) => l.name.toLowerCase().includes(k));
+  const checks = $derived(lane('check')), model = $derived(lane('model')), runs = $derived(lane('behaviour'));
+  const avg = (l?: (typeof lanes)[number]) => (l?.finished.length ? l.finished.reduce((a, f) => a + f.tookMs, 0) / l.finished.length : 0);
+  const openIssues = $derived((app.issueList?.issues ?? []).filter((i) => i.state === 'open'));
+  const byAI = $derived(openIssues.filter((i) => i.source === 'llm').length);
+  const sevCount = (sv: string) => openIssues.filter((i) => i.severity === sv).length;
+  const reviewed = $derived(app.commits.filter((c) => c.status === 'done').length);
+  const aiCalls = $derived(items.filter((a) => a.kind !== 'step'));
+  const kindsCount = $derived([...aiCalls.reduce((m, a) => m.set(a.kind, (m.get(a.kind) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1]));
+  const fixes = $derived(items.filter((a) => a.kind === 'fix'));
+  const fixRunning = $derived(fixes.find((a) => a.status === 'running'));
+  const call = $derived(live.call?.status === 'running' ? live.call : null);
+  const links = $derived([
+    { from: 'commits', to: 'checks', busy: !!checks?.running || (checks?.count ?? 0) > 0, label: checks?.count ? `${checks.count} waiting` : '' },
+    { from: 'checks', to: 'model', busy: !!model?.running, label: model?.count ? `${model.count} waiting` : '' },
+    { from: 'model', to: 'claims', busy: !!call && call.kind !== 'fix' },
+    { from: 'claims', to: 'issues', busy: !!call && (call as { phase?: string }).phase === 'writing' && call.kind !== 'fix' },
+    { from: 'checks', to: 'runs', busy: !!runs?.running, tone: '100,200,255' },
+    { from: 'runs', to: 'issues', busy: !!runs?.running, tone: '100,200,255' },
+    { from: 'issues', to: 'fixes', busy: !!fixRunning, tone: '80,200,120' },
+  ]);
+
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && picked && close()} />
@@ -119,18 +146,50 @@
     <input class="search" bind:value={query} placeholder="Search title, file, commit…" spellcheck="false" />
   </header>
 
-  <section class="lanes" aria-label="Work lanes">
-    {#each lanes as l (l.name)}
-      <div class="lane" class:busy={!!l.running}>
-        <div class="lh">
-          {#if l.running}<Orb mood="reading" size={34} label="{l.name} working" />{:else}<span class="idle-dot"></span>{/if}
-          <div><b>{l.name}</b><span>{l.running ? `working · ${since(l.since)}` : l.count ? `${l.count} waiting` : 'Idle'}</span></div>
-        </div>
-        {#if l.running}<button class="run" onclick={() => goCommit(l.running!)} title={msgOf(l.running)}><span class="mono">{l.running.slice(0, 7)}</span> {msgOf(l.running) || 'working'}</button>{/if}
-        {#if l.waiting.length}<div class="q"><span>Next</span>{#each l.waiting.slice(0, 4) as w (w)}<button class="pill mono" title={msgOf(w)} onclick={() => goCommit(w)}>{w.slice(0, 7)}</button>{/each}{#if l.count > 4}<span>+{l.count - 4}</span>{/if}</div>{/if}
-        {#if l.finished.length}<div class="q"><span>Done</span>{#each l.finished.slice(0, 3) as f (f.sha + f.at)}<button class="pill mono" title={msgOf(f.sha)} onclick={() => goCommit(f.sha)}>{f.sha.slice(0, 7)} · {secs(f.tookMs)}</button>{/each}</div>{/if}
-      </div>
-    {:else}<p class="empty">Loading lanes…</p>{/each}
+  <!-- The pipeline: every stage a card, joined by the way work flows. Links light up and run while work passes. -->
+  <section class="flow" bind:this={flow} aria-label="How a commit moves through Codist">
+    <Wires root={flow} {links} />
+    <button class="stage-card" data-node="commits" style:grid-area="commits" onclick={() => (app.mode = 'commits')}>
+      <h3>Commits</h3>
+      <b>{app.commits.length}</b><span>in history · {reviewed} reviewed</span>
+      {#if app.commits[0]}<p class="last">Newest: {app.commits[0].commit.message}</p>{/if}
+    </button>
+    <div class="stage-card" data-node="checks" style:grid-area="checks" class:busy={!!checks?.running}>
+      <h3>Code checks</h3>
+      <b>{checks?.running ? 'working' : checks?.count ? checks.count : 'idle'}</b><span>{checks?.count ? 'commits waiting' : 'exact, no AI'}{avg(checks) ? ` · ${secs(avg(checks))} each` : ''}</span>
+      {#if checks?.running}<p class="last mono">{checks.running.slice(0, 7)} {msgOf(checks.running)}</p>{/if}
+    </div>
+    <div class="stage-card ai" data-node="model" style:grid-area="model" class:busy={!!model?.running || !!call}>
+      <div class="hrow"><h3>AI reads</h3>{#if model?.running || call}<Orb mood={call && (call as { phase?: string }).phase === 'writing' ? 'writing' : 'reading'} size={30} label="AI working" />{/if}</div>
+      {#if call}
+        <b class="small">{(call as { phase?: string }).phase === 'writing' ? 'Writing' : 'Reading'}</b>
+        <span>{call.path ? call.path.slice(call.path.lastIndexOf('/') + 1) : call.title}</span>
+        <p class="last">{call.replyTokens ? `${call.replyTokens} words so far · ` : ''}{since(new Date(call.at).toISOString())}</p>
+      {:else}
+        <b>{model?.count ?? 0}</b><span>commits waiting{avg(model) ? ` · ${secs(avg(model))} each` : ''}</span>
+      {/if}
+      {#if app.status?.llmProblem}<p class="warn">{app.status.llmProblem}</p>{/if}
+    </div>
+    <div class="stage-card" data-node="claims" style:grid-area="claims">
+      <h3>Claims tested</h3>
+      <b>{aiCalls.length}</b><span>AI calls so far</span>
+      <ul class="kinds">{#each kindsCount.slice(0, 4) as [k, n]}<li><span>{k}</span><i>{n}</i></li>{/each}</ul>
+    </div>
+    <button class="stage-card" data-node="issues" style:grid-area="issues" onclick={() => (app.mode = 'issues')}>
+      <h3>Issues</h3>
+      <b>{openIssues.length}</b><span>open · {byAI} found by AI</span>
+      <div class="sev">{#each ['critical', 'high', 'medium', 'low'] as sv}{#if sevCount(sv)}<i class={sv} style:flex={sevCount(sv)} title="{sevCount(sv)} {sv}"></i>{/if}{/each}</div>
+    </button>
+    <div class="stage-card" data-node="runs" style:grid-area="runs" class:busy={!!runs?.running} class:off={!app.status?.behaviour}>
+      <h3>Behaviour runs</h3>
+      {#if !app.status?.behaviour}<b class="small">off</b><span>runs the code before and after a commit; turn on with behaviour = true</span>
+      {:else}<b>{runs?.running ? 'running' : runs?.count ?? 0}</b><span>{runs?.running ? msgOf(runs.running) : 'waiting'}</span>{/if}
+    </div>
+    <div class="stage-card" data-node="fixes" style:grid-area="fixes" class:busy={!!fixRunning}>
+      <h3>Fixes</h3>
+      <b>{fixes.length}</b><span>prepared · {fixes.filter((f) => f.status === 'failed').length} failed</span>
+      {#if fixRunning}<p class="last">Preparing: {fixRunning.title.replace(/^Fix: /, '')}</p>{:else}<p class="last">A fix you apply becomes a new commit, and goes round again.</p>{/if}
+    </div>
   </section>
 
   <div class="chips">
@@ -247,15 +306,6 @@
   .head p { margin: 4px 0 0; color: var(--text-3); font-size: 12.5px; }
   .search { margin-left: auto; width: 300px; max-width: 45vw; height: 34px; padding: 0 14px; border-radius: 11px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; box-shadow: var(--elev-1); }
   .search:focus { outline: none; border-color: var(--accent); }
-  .lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .lane { padding: 14px 16px; border-radius: 14px; background: var(--glass); border: 1px solid var(--border); box-shadow: var(--elev-1); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-  .lane.busy { border-color: rgba(139, 124, 246, 0.45); box-shadow: var(--elev-1), var(--glow-soft); }
-  .lh { display: flex; align-items: center; gap: 12px; }
-  .lh div { display: flex; flex-direction: column; } .lh b { font-size: 13.5px; } .lh span { font-size: 12px; color: var(--text-3); }
-  .idle-dot { width: 10px; height: 10px; margin: 0 12px; border-radius: 50%; background: var(--surface-3); }
-  .run { border: 0; background: none; padding: 0; text-align: left; font-size: 12.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .q { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 11.5px; color: var(--text-3); }
-  .pill { border: 1px solid var(--border); background: var(--surface-2); border-radius: 99px; padding: 1px 8px; font-size: 11px; color: var(--text-2); }
   .chips { display: flex; gap: 6px; align-items: center; margin: 0 0 12px; flex-wrap: wrap; }
   .fchip { height: 30px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--border); background: none; font: 12.5px var(--font); color: var(--text-2); }
   .fchip.on { color: var(--text); background: var(--surface-3); border-color: var(--border-strong); box-shadow: inset 0 1px 0 var(--edge), 0 2px 0 rgba(0, 0, 0, 0.4); }
@@ -319,6 +369,25 @@
   @media (prefers-reduced-motion: reduce) { .row.running .dot { animation: none; } }
 
   /* Long words (a full method chain, a path) wrap inside the card instead of running over the code. */
-  .note, .note p, .note li, .wside .note, .ftitle h2, .title h2 { overflow-wrap: anywhere; min-width: 0; }
+  .note, .note p, .note li, .ftitle h2 { overflow-wrap: anywhere; min-width: 0; }
   .left, .right { min-width: 0; }
+  .flow { position: relative; display: grid; gap: 34px 46px; margin: 4px 0 26px;
+    grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-areas: 'commits checks model claims issues' '. runs . . fixes'; }
+  .stage-card { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; padding: 14px 16px;
+    border-radius: 14px; border: 1px solid var(--border); background: var(--glass-strong); box-shadow: var(--elev-1); text-align: left; color: inherit; font: inherit;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; }
+  button.stage-card:hover { transform: translateY(-2px); box-shadow: var(--elev-2); border-color: var(--border-strong); }
+  .stage-card.busy { border-color: rgba(139, 124, 246, 0.55); box-shadow: var(--elev-2), var(--glow-soft); }
+  .stage-card.off { opacity: 0.6; }
+  .stage-card b { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .stage-card b.small { font-size: 16px; }
+  .stage-card > span { font-size: 11.5px; color: var(--text-3); }
+  .stage-card .last { margin: 6px 0 0; font-size: 11.5px; color: var(--text-2); width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stage-card .warn { margin: 6px 0 0; font-size: 11px; color: var(--warn); }
+  .hrow { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+  .kinds { list-style: none; margin: 6px 0 0; padding: 0; width: 100%; display: grid; gap: 2px; }
+  .kinds li { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-2); } .kinds i { font-style: normal; color: var(--text-3); }
+  .sev { display: flex; gap: 2px; width: 100%; height: 6px; margin-top: 8px; border-radius: 3px; overflow: hidden; }
+  .sev i { display: block; } .sev .critical { background: var(--sev-critical); } .sev .high { background: var(--sev-high); } .sev .medium { background: var(--sev-medium); } .sev .low { background: var(--sev-low); }
+  @media (max-width: 1100px) { .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: 'commits checks' 'model claims' 'issues runs' 'fixes .'; } }
 </style>
