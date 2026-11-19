@@ -18,8 +18,9 @@
 </script>
 
 <nav class="rail" aria-label="Screens">
-  <button class="mark" title="Now" onclick={() => (app.mode = 'now')} aria-label="Codist">
+  <button class="mark" title="Codist" onclick={() => (app.mode = 'now')} aria-label="Codist, home">
     <span class="dotmark"></span>
+    <span class="word">Codist</span>
   </button>
   <div class="items">
     {#each ITEMS.filter((i) => i.mode === 'now' || i.mode === 'issues' || i.mode === 'commits' || i.mode === 'map' || app.menuOn(i.mode)) as it}
@@ -43,7 +44,8 @@
 <style>
   .rail { display: flex; flex-direction: column; align-items: center; width: 60px; flex-shrink: 0; padding: 12px 0 10px; gap: 10px;
     background: var(--rail-bg, var(--sidebar)); border-right: 1px solid var(--border); box-shadow: 8px 0 30px -18px rgba(0, 0, 0, 0.8); position: relative; z-index: 20; }
-  .mark { width: 36px; height: 36px; display: grid; place-items: center; border: 0; background: none; border-radius: 12px; }
+  .mark { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 4px 0; border: 0; background: none; }
+  .word { font-size: 10.5px; font-weight: 650; letter-spacing: 0.02em; color: var(--text); }
   .dotmark { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
   .items { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
   .item { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 12px; background: none;

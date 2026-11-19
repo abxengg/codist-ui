@@ -27,6 +27,7 @@
 </script>
 
 <div class="now">
+  <div class="brandbar"><b>Codist</b><span>{app.status?.repo ?? ""}{app.status?.branch ? ` · ${app.status.branch}` : ""}</span></div>
   <section class="hero">
     <Orb mood={live.mood} size={170} label={live.sentence} />
     <h1>{live.sentence}</h1>
@@ -50,7 +51,7 @@
 
   <div class="cols">
     <section class="block">
-      <header><h2>Needs your attention</h2><span class="hr"><label class="codetog"><input type="checkbox" bind:checked={app.showCode} /> Show code</label>{#if open.length > attention.length}<button class="more" onclick={() => (app.mode = 'issues')}>All {open.length} →</button>{/if}</span></header>
+      <header><h2>Needs your attention</h2><span class="hr">{#if open.length > attention.length}<button class="more" onclick={() => (app.mode = 'issues')}>All {open.length} →</button>{/if}</span></header>
       {#if !app.issueList}
         <p class="empty">Loading…</p>
       {:else if attention.length === 0}
@@ -90,6 +91,9 @@
 
 <style>
   .now { flex: 1; min-height: 0; overflow: auto; padding: 0 clamp(16px, 4vw, 56px) 48px; }
+  .brandbar { display: flex; align-items: baseline; gap: 10px; padding: 20px 0 0; max-width: 1280px; margin: 0 auto; }
+  .brandbar b { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  .brandbar span { font-size: 12.5px; color: var(--text-3); }
   .hero { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 36px 0 28px; }
   h1 { position: relative; margin: 18px 0 6px; font-size: clamp(22px, 2.6vw, 30px); font-weight: 600; letter-spacing: -0.02em; }
   .sub { position: relative; margin: 0; color: var(--text-2); font-size: 14px; }
@@ -108,8 +112,6 @@
   header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
   h2 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
   .hr { display: flex; gap: 14px; align-items: baseline; }
-  .codetog { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--text-3); cursor: pointer; }
-  .codetog input { accent-color: var(--accent); margin: 0; }
   .more { border: 0; background: none; color: var(--text-3); font-size: 12px; } .more:hover { color: var(--text); }
   .list { display: flex; flex-direction: column; gap: 8px; }
   .empty { color: var(--text-3); }

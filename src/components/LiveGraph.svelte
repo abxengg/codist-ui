@@ -30,7 +30,7 @@
   };
 
   const DEFAULTS = { center: 0.5, repel: 0.6, link: 0.5, distance: 0.45, group: true, size: 1, text: 0.55, tests: false, drift: true,
-    three: false, colour: 'plain' as 'plain' | 'kind' | 'service' | 'issues', issuesOnly: false, hidden: [] as string[], orphans: true, linkColour: true };
+    three: false, colour: 'plain' as 'plain' | 'kind' | 'service' | 'issues', issuesOnly: false, hidden: [] as string[], orphans: true, linkColour: true, only: '' as string };
   let f = $state({ ...DEFAULTS, ...load() });
   function load() { try { return JSON.parse(localStorage.getItem('codist.mapForces') ?? '{}'); } catch { return {}; } }
   $effect(() => { const v = JSON.stringify(f); try { localStorage.setItem('codist.mapForces', v); } catch { /* storage blocked */ } });
@@ -45,7 +45,10 @@
   let count = $state({ classes: 0, services: 0, links: 0, troubled: 0 });
   let kindsHere = $state<[string, number][]>([]);
   let modsHere = $state<string[]>([]);
+  let allServices = $state<string[]>([]);
   let orphans = $state(0);
+  /** A local graph: only the classes within depth links of one class, as in Obsidian. */
+  let local = $state<{ id: string; label: string; depth: number } | null>(null);
   /** Classes a change to the picked one can reach: everything that uses it, directly or through others. */
   let reach = $state.raw<Set<N> | null>(null);
 
@@ -93,7 +96,19 @@
     const old = new Map(nodes.map((n) => [n.id, n]));
     const linked = new Set<string>();
     for (const e of gr.edges) if (e.source !== e.target) { linked.add(e.source); linked.add(e.target); }
-    const keep = gr.nodes.filter((n) => (f.tests || n.stereotype !== 'test') && !f.hidden.includes(n.stereotype) && (f.orphans || linked.has(n.id)));
+    const modOf0 = (g: GraphNode) => g.module || g.pkg.split('.').slice(0, 3).join('.') || 'code';
+    let near: Set<string> | null = null;
+    if (local) {
+      // Breadth-first over the links, both ways, up to the chosen depth.
+      const nb = new Map<string, string[]>();
+      for (const e of gr.edges) { nb.set(e.source, [...(nb.get(e.source) ?? []), e.target]); nb.set(e.target, [...(nb.get(e.target) ?? []), e.source]); }
+      near = new Set([local.id]);
+      let ring = [local.id];
+      for (let d = 0; d < local.depth; d++) { const next: string[] = []; for (const id of ring) for (const o of nb.get(id) ?? []) if (!near.has(o)) { near.add(o); next.push(o); } ring = next; }
+    }
+    allServices = [...new Set(gr.nodes.map(modOf0))].sort();
+    const keep = gr.nodes.filter((n) => (f.tests || n.stereotype !== 'test') && !f.hidden.includes(n.stereotype) && (f.orphans || linked.has(n.id))
+      && (!f.only || modOf0(n) === f.only) && (!near || near.has(n.id)));
     orphans = gr.nodes.filter((n) => (f.tests || n.stereotype !== 'test') && !linked.has(n.id)).length;
     const modOf = (g: GraphNode) => g.module || g.pkg.split('.').slice(0, 3).join('.') || 'code';
     mods = [...new Set(keep.map(modOf))];
@@ -133,7 +148,7 @@
     count = { classes: nodes.length, services: mods.length, links: edges.length, troubled };
   }
   // Rebuild only when the graph or what is shown changes; build itself reads much else that must not trigger it.
-  $effect(() => { void app.graph; void f.tests; void f.hidden.length; void f.orphans; untrack(build); });
+  $effect(() => { void app.graph; void f.tests; void f.hidden.length; void f.orphans; void f.only; void local; untrack(build); untrack(() => fit()); });
   $effect(() => { void openByFile; untrack(paintIssues); });
   $effect(() => { void f.center; void f.repel; void f.link; void f.distance; void f.group; heat = 1; });
   $effect(() => {
@@ -429,12 +444,30 @@
   <canvas bind:this={canvas}></canvas>
 
   <div class="hud tl">
-    <input placeholder="Find a class…" bind:value={query} onkeydown={(e) => e.key === 'Enter' && find()} spellcheck="false" />
+    <div class="row">
+      <input placeholder="Find a class…" bind:value={query} onkeydown={(e) => e.key === 'Enter' && find()} spellcheck="false" />
+      {#if allServices.length > 1}
+        <select class="pick" bind:value={f.only} title="Show one service on its own">
+          <option value="">All services</option>
+          {#each allServices as m}<option value={m}>{m}</option>{/each}
+        </select>
+      {/if}
+    </div>
     <div class="facts">
-      <span><b>{count.services}</b> services</span><span><b>{count.classes}</b> classes</span><span><b>{count.links}</b> links</span>
-      <button class="tr-btn" class:on={!f.orphans} onclick={() => (f.orphans = !f.orphans)} title="Classes with no links to any other"><b class="plain">{orphans}</b> orphans{f.orphans ? '' : ' hidden'}</button>
+      <span><b>{count.services}</b> service{count.services === 1 ? '' : 's'}</span><span><b>{count.classes}</b> classes</span><span><b>{count.links}</b> links</span>
+      <button class="tr-btn" class:on={!f.orphans} onclick={() => (f.orphans = !f.orphans)} title="Classes with no links to any other"><b class="zero">{orphans}</b> orphans{f.orphans ? '' : ' hidden'}</button>
       {#if count.troubled}<button class="tr-btn" class:on={f.issuesOnly} onclick={() => (f.issuesOnly = !f.issuesOnly)} title="Fade the classes without open issues"><b>{count.troubled}</b> with issues</button>{/if}
     </div>
+    {#if local || f.only}
+      <div class="chips">
+        {#if f.only}<span class="chip">Service: <b>{f.only}</b><button aria-label="Show all services" onclick={() => (f.only = '')}>×</button></span>{/if}
+        {#if local}
+          <span class="chip">Around <b>{local.label}</b>
+            <span class="depth">{#each [1, 2, 3] as d}<button class:on={local.depth === d} onclick={() => local && (local = { ...local, depth: d })}>{d}</button>{/each}</span>
+            <button aria-label="Show the whole graph" onclick={() => (local = null)}>×</button></span>
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <div class="hud tr">
@@ -514,9 +547,12 @@
         <div><b>{details.fields}</b><span>fields</span></div>
         <div class:bad={details.issues.length}><b>{details.issues.length}</b><span>open issues</span></div>
       </div>
+      <div class="two">
+      <button class="b3" onclick={() => picked && (local = { id: picked.id, label: picked.label, depth: 1 })} title="Only this class and the classes linked to it">Local graph</button>
       <button class="b3 reach" class:primary={!!reach} onclick={showReach}>
-        {reach ? `${reach.size} class${reach.size === 1 ? '' : 'es'} reached · clear` : 'Show what a change here reaches'}
+        {reach ? `${reach.size} reached · clear` : 'What a change reaches'}
       </button>
+      </div>
       {#if details.issues.length}
         <h3>Open issues</h3>
         <div class="issues">{#each details.issues as g (g[0].id)}<IssueCard {g} />{/each}</div>
@@ -552,13 +588,24 @@
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
   .hud { position: absolute; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .tl { top: 14px; left: 14px; flex-direction: column; align-items: flex-start; }
+  .row { display: flex; gap: 8px; }
+  .pick { height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--glass); color: var(--text); box-shadow: var(--elev-1); font: 13px var(--font); max-width: 220px; }
+  .facts { flex-wrap: nowrap; white-space: nowrap; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 11px; border-radius: 99px; font-size: 12px; color: var(--text-2);
+    background: var(--glass-strong); border: 1px solid var(--accent); box-shadow: var(--elev-1); }
+  .chip b { color: var(--text); font-weight: 600; }
+  .chip > button { border: 0; background: none; color: var(--text-3); font-size: 15px; line-height: 1; padding: 0 4px; }
+  .depth { display: flex; gap: 2px; margin-left: 4px; }
+  .depth button { width: 20px; height: 20px; border: 0; border-radius: 6px; background: var(--surface-2); color: var(--text-3); font-size: 11px; }
+  .depth button.on { background: var(--accent); color: #fff; }
   .tr { top: 14px; right: 14px; justify-content: flex-end; }
   .hud input { width: 240px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); color: var(--text); background: var(--glass); box-shadow: var(--elev-1); font-size: 13px; }
   .hud input:focus { outline: none; border-color: var(--accent); }
   .facts { display: flex; gap: 12px; font-size: 11.5px; color: var(--text-3); align-items: center; }
   .facts b { color: var(--text-2); font-weight: 600; }
   .tr-btn { white-space: nowrap; border: 1px solid var(--border); background: var(--glass); border-radius: 99px; padding: 2px 9px; font-size: 11.5px; color: var(--text-3); }
-  .tr-btn b { color: #ff8f40; } .tr-btn b.plain { color: var(--text-2); } .tr-btn.on { color: var(--text); border-color: var(--border-strong); }
+  .tr-btn b { color: #ff8f40; } .tr-btn b.zero { color: var(--text-2); } .tr-btn.on { color: var(--text); border-color: var(--border-strong); }
   .seg { display: flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--glass); box-shadow: var(--elev-1); border: 1px solid var(--border); }
   .seg button { border: 0; background: none; height: 26px; padding: 0 10px; border-radius: 8px; font-size: 12px; color: var(--text-3); }
   .seg button.on { color: var(--text); background: var(--surface-3); box-shadow: inset 0 1px 0 var(--edge), 0 2px 0 rgba(0, 0, 0, 0.4); }
@@ -607,6 +654,6 @@
   .methods li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
   .methods small { color: var(--text-3); text-align: right; }
   .more { margin-top: 6px; border: 0; background: none; padding: 0; color: var(--accent-text); font-size: 12px; }
-  .reach { margin: 12px 0 2px; width: 100%; justify-content: center; }
+  .two { display: flex; gap: 8px; margin: 12px 0 2px; } .two .b3 { flex: 1; justify-content: center; }
   .file { margin: 18px 0 0; font-size: 11px; color: var(--text-3); word-break: break-all; }
 </style>
