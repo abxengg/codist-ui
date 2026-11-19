@@ -29,6 +29,7 @@
 <div class="now">
   <div class="brandbar"><b>Codist</b><span>{app.status?.repo ?? ""}{app.status?.branch ? ` · ${app.status.branch}` : ""}</span></div>
   <section class="hero">
+    <div class="light" aria-hidden="true"></div>
     <Orb mood={live.mood} size={170} label={live.sentence} />
     <h1>{live.sentence}</h1>
     <p class="sub">
@@ -95,13 +96,20 @@
   .brandbar b { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
   .brandbar span { font-size: 12.5px; color: var(--text-3); }
   .hero { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 36px 0 28px; }
+  /* The orb as a light source: a soft pool of its colour behind it, breathing slowly. */
+  .light { position: absolute; top: -40px; left: 50%; width: 760px; height: 460px; transform: translateX(-50%); pointer-events: none;
+    background: radial-gradient(closest-side, rgba(124, 100, 255, 0.16), rgba(124, 100, 255, 0.05) 55%, transparent); filter: blur(10px);
+    animation: breathe 6s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: 0.65; transform: translateX(-50%) scale(0.96); } }
+  @media (prefers-reduced-motion: reduce) { .light { animation: none; } }
+  .hero > :global(*:not(.light)) { position: relative; }
   h1 { position: relative; margin: 18px 0 6px; font-size: clamp(22px, 2.6vw, 30px); font-weight: 600; letter-spacing: -0.02em; }
   .sub { position: relative; margin: 0; color: var(--text-2); font-size: 14px; }
   .sub b { color: var(--text); font-weight: 600; }
   .stats { position: relative; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 26px; }
   .stat { display: flex; flex-direction: column; align-items: center; min-width: 116px; padding: 12px 16px; border-radius: 16px; border: 1px solid var(--border);
     background: var(--glass, var(--surface)); box-shadow: var(--elev-1); color: inherit; }
-  button.stat:hover { border-color: var(--border-strong); transform: translateY(-2px); box-shadow: var(--elev-2); }
+  button.stat:hover { border-color: rgba(139, 116, 255, 0.45); transform: translateY(-2px); box-shadow: var(--elev-2), var(--glow-soft); }
   .stat { transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s; }
   .stat b { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .stat span { font-size: 11.5px; color: var(--text-3); }

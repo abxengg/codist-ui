@@ -124,6 +124,8 @@ body {
   --elev-1: inset 0 1px 0 var(--edge), 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 28px -10px rgba(0, 0, 0, 0.7);
   --elev-2: inset 0 1px 0 var(--edge), 0 2px 4px rgba(0, 0, 0, 0.5), 0 22px 48px -14px rgba(0, 0, 0, 0.85);
   --accent-edge: #4a33b8;
+  --glow: 0 0 28px -6px rgba(139, 116, 255, 0.55);
+  --glow-soft: 0 0 60px -18px rgba(139, 116, 255, 0.45);
   --rail-bg: rgba(12, 12, 18, 0.9);
   --map-bg: #111116;
   --surface-3: #282836;
@@ -140,6 +142,8 @@ body {
   --elev-1: 0 1px 2px rgba(20, 20, 50, 0.08), 0 10px 26px -12px rgba(20, 20, 50, 0.22);
   --elev-2: 0 2px 4px rgba(20, 20, 50, 0.1), 0 24px 48px -16px rgba(20, 20, 50, 0.3);
   --accent-edge: #3d24b0;
+  --glow: 0 0 22px -8px rgba(109, 74, 255, 0.35);
+  --glow-soft: 0 0 50px -20px rgba(109, 74, 255, 0.3);
   --rail-bg: rgba(250, 250, 253, 0.92);
   --map-bg: #fafafa;
   --accent: #6d4aff;
@@ -323,7 +327,7 @@ kbd {
   transform: translateY(0); transition: transform 0.08s, box-shadow 0.08s, filter 0.15s; }
 .b3:hover { filter: brightness(1.12); }
 .b3:active { transform: translateY(2px); box-shadow: inset 0 1px 0 var(--edge), 0 0 0 rgba(0, 0, 0, 0.45), 0 2px 6px -4px rgba(0, 0, 0, 0.6); }
-.b3.primary { color: #fff; background: var(--accent); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 2px 0 var(--accent-edge), 0 8px 18px -6px rgba(60, 30, 160, 0.7); }
+.b3.primary { color: #fff; background: var(--accent); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 2px 0 var(--accent-edge), 0 8px 18px -6px rgba(60, 30, 160, 0.7), var(--glow); }
 .b3.primary:active { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 0 0 var(--accent-edge), 0 2px 6px -4px rgba(60, 30, 160, 0.7); }
 .b3.ghost { background: transparent; box-shadow: none; color: var(--text-3); }
 .b3.ghost:hover, .b3.ghost.on { color: var(--text); background: var(--surface-2); }

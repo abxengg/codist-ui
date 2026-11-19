@@ -12,7 +12,7 @@
   import type { GraphEdge, GraphNode, Issue } from '../lib/types';
 
   type N = { id: string; g: GraphNode; x: number; y: number; z: number; vx: number; vy: number; vz: number; r: number; m: number;
-    deg: number; ins: number; outs: number; issues: number; worst: string; pinned: boolean; label: string; px: number; py: number; pz: number; ps: number };
+    deg: number; ins: number; outs: number; lines: number; issues: number; worst: string; pinned: boolean; label: string; px: number; py: number; pz: number; ps: number };
   type E = { a: N; b: N; same: boolean; kind: GraphEdge['kind'] };
 
   // Muted on purpose: colour is for meaning, not decoration.
@@ -22,6 +22,8 @@
   };
   const SERVICE_COL = ['#8d84c6', '#6f93c4', '#62a091', '#b99a5e', '#b77d9c', '#b98b60', '#7fa36f', '#6fa3b0', '#a08cc0', '#b0907a'];
   const PLAIN = '#8e8e98';
+  const GLYPH: Record<string, string> = { class: 'C', interface: 'I', record: 'R', enum: 'E' };
+  const KINDNAME: Record<string, string> = { class: 'class', interface: 'interface', record: 'record', enum: 'enum' };
   const LINK_COL: Record<GraphEdge['kind'], string> = { injects: '110,140,190', uses: '140,140,155', extends: '98,160,145', implements: '125,165,110', feign: '183,125,156' };
   const SEV_COL: Record<string, string> = { critical: '#ff5c50', high: '#ff8f40', medium: '#f2c744', low: '#a3a3ad', info: '#a3a3ad' };
   const LINK: Record<GraphEdge['kind'], { label: string; dash: number[]; w: number }> = {
@@ -30,7 +32,7 @@
   };
 
   const DEFAULTS = { center: 0.5, repel: 0.6, link: 0.5, distance: 0.45, group: true, size: 1, text: 0.55, tests: false, drift: true,
-    three: false, colour: 'plain' as 'plain' | 'kind' | 'service' | 'issues', issuesOnly: false, hidden: [] as string[], orphans: true, linkColour: true, only: '' as string };
+    three: false, colour: 'plain' as 'plain' | 'kind' | 'service' | 'issues', issuesOnly: false, hidden: [] as string[], orphans: true, linkColour: true, only: '' as string, sizeBy: 'links' as 'links' | 'lines' | 'members' | 'in' | 'out', meta: true };
   let f = $state({ ...DEFAULTS, ...load() });
   function load() { try { return JSON.parse(localStorage.getItem('codist.mapForces') ?? '{}'); } catch { return {}; } }
   $effect(() => { const v = JSON.stringify(f); try { localStorage.setItem('codist.mapForces', v); } catch { /* storage blocked */ } });
@@ -119,8 +121,11 @@
       const m = mods.indexOf(modOf(g));
       const a = (m / Math.max(1, mods.length)) * Math.PI * 2;
       const d = (ins.get(g.id) ?? 0) + (outs.get(g.id) ?? 0);
+      const lines = Math.max(1, g.endLine - g.startLine + 1);
+      // What the size of a dot says, as chosen; each measure is scaled to a similar range.
+      const v = f.sizeBy === 'lines' ? lines / 12 : f.sizeBy === 'members' ? g.members.length : f.sizeBy === 'in' ? ins.get(g.id) ?? 0 : f.sizeBy === 'out' ? outs.get(g.id) ?? 0 : d;
       return { id: g.id, g, x: was?.x ?? Math.cos(a) * 300 + (Math.random() - 0.5) * 200, y: was?.y ?? Math.sin(a) * 300 + (Math.random() - 0.5) * 200,
-        z: was?.z ?? (f.three ? (Math.random() - 0.5) * 300 : 0), vx: 0, vy: 0, vz: 0, r: Math.min(26, 2.4 + Math.pow(d, 0.62) * 1.7), m, deg: d, ins: ins.get(g.id) ?? 0,
+        z: was?.z ?? (f.three ? (Math.random() - 0.5) * 300 : 0), vx: 0, vy: 0, vz: 0, r: Math.min(26, 3 + Math.pow(v, 0.62) * 1.7), m, lines, deg: d, ins: ins.get(g.id) ?? 0,
         outs: outs.get(g.id) ?? 0, issues: 0, worst: '', pinned: false, label: g.name, px: 0, py: 0, pz: 0, ps: 1 };
     });
     const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -148,7 +153,7 @@
     count = { classes: nodes.length, services: mods.length, links: edges.length, troubled };
   }
   // Rebuild only when the graph or what is shown changes; build itself reads much else that must not trigger it.
-  $effect(() => { void app.graph; void f.tests; void f.hidden.length; void f.orphans; void f.only; void local; untrack(build); untrack(() => fit()); });
+  $effect(() => { void app.graph; void f.tests; void f.hidden.length; void f.orphans; void f.only; void f.sizeBy; void local; untrack(build); untrack(() => fit()); });
   $effect(() => { void openByFile; untrack(paintIssues); });
   $effect(() => { void f.center; void f.repel; void f.link; void f.distance; void f.group; heat = 1; });
   $effect(() => {
@@ -316,6 +321,15 @@
       if (!f.three) { const s = 1 / cam.k - 1 / k0; cam.x += (e.offsetX - W / 2) * s; cam.y += (e.offsetY - H / 2) * s; }
     }, { passive: false });
 
+    // A dot's shape says what type it is: class a disc, interface a ring, record a rounded square, enum a diamond.
+    const shape = (kind: string, x: number, y: number, r: number, col: string) => {
+      ctx.fillStyle = col; ctx.strokeStyle = col;
+      ctx.beginPath();
+      if (kind === 'interface') { ctx.lineWidth = Math.max(1.5, r * 0.28); ctx.arc(x, y, r * 0.86, 0, Math.PI * 2); ctx.stroke(); return; }
+      if (kind === 'record') { const s = r * 0.9, k = s * 0.45; ctx.roundRect(x - s, y - s, s * 2, s * 2, k); ctx.fill(); return; }
+      if (kind === 'enum') { const s = r * 1.15; ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y); ctx.closePath(); ctx.fill(); return; }
+      ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    };
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     let lit = 0, litNode: N | null = null, raf = 0, last = performance.now(), t = 0, idle = 0;
     const frame = (now: number) => {
@@ -342,6 +356,7 @@
       const depthA = (n: N) => (f.three ? Math.max(0.15, Math.min(1, 0.55 + n.ps - 0.9)) : 1);
       const dim = (n: N) => (f.issuesOnly && !n.issues ? 0.18 : 1);
 
+      const fam = getComputedStyle(document.documentElement).getPropertyValue('--font') || 'sans-serif';
       // Lines, styled by kind.
       for (const e of edges) {
         const on = litNode && (e.a === litNode || e.b === litNode);
@@ -376,8 +391,20 @@
         const fade = (reach ? (reach.has(n) || n === picked ? 1 : 0.12) : litNode && !on && !nb ? 1 - 0.8 * lit : 1) * depthA(n) * dim(n);
         const r = n.r * f.size * Math.max(0.6, Math.min(2.4, cam.k)) * n.ps * (on ? 1 + 0.25 * lit : 1);
         ctx.globalAlpha = fade;
-        ctx.fillStyle = on || (reach && reach.has(n)) ? accent : colourOf(n);
-        ctx.beginPath(); ctx.arc(n.px, n.py, r, 0, Math.PI * 2); ctx.fill();
+        const col = on || (reach && reach.has(n)) ? accent : colourOf(n);
+        // A soft light around what matters: a class with open issues, or the one in focus.
+        const glow = on || n === picked ? accent : n.issues ? SEV_COL[n.worst] ?? SEV_COL.medium : '';
+        if (glow && fade > 0.3) { ctx.shadowColor = glow; ctx.shadowBlur = Math.min(28, 10 + r); }
+        shape(n.g.kind, n.px, n.py, r, col);
+        ctx.shadowBlur = 0;
+        // The type's letter inside, the way an IDE marks them, once the dot is big enough to hold it.
+        if (r >= 7) {
+          ctx.fillStyle = n.g.kind === 'interface' ? col : 'rgba(10,10,16,0.82)';
+          ctx.font = `600 ${Math.round(r * 0.95)}px ${fam}`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(GLYPH[n.g.kind] ?? 'C', n.px, n.py + 0.5);
+          ctx.textBaseline = 'alphabetic';
+        }
         // A class with open issues gets a small mark beside it whatever the colouring.
         if (n.issues && (f.colour === 'plain' || f.colour === 'issues')) {
           ctx.strokeStyle = SEV_COL[n.worst] ?? SEV_COL.medium; ctx.lineWidth = 1.5;
@@ -399,7 +426,6 @@
       }
       // Labels fade in with zoom; the lit node and its neighbours always show theirs.
       const zoomAlpha = Math.max(0, Math.min(1, (cam.k - (0.3 + f.text * 1.6)) * 2.5));
-      const fam = getComputedStyle(document.documentElement).getPropertyValue('--font') || 'sans-serif';
       ctx.textAlign = 'center';
       ctx.font = `11px ${fam}`;
       for (const n of draw) {
@@ -409,7 +435,15 @@
         if (n === reading) a = 1;
         if (a < 0.03) continue;
         ctx.fillStyle = dark ? `rgba(200,201,212,${a})` : `rgba(45,45,58,${a})`;
-        ctx.fillText(n.label, n.px, n.py + n.r * f.size * Math.max(0.6, Math.min(2.4, cam.k)) * n.ps + 13);
+        const below = n.py + n.r * f.size * Math.max(0.6, Math.min(2.4, cam.k)) * n.ps + 13;
+        ctx.font = `11px ${fam}`;
+        ctx.fillText(n.label, n.px, below);
+        // A second, quieter line: links in and out, and the size of the class.
+        if (f.meta && (on || nb || cam.k > 1.7)) {
+          ctx.font = `10px ${fam}`;
+          ctx.fillStyle = dark ? `rgba(150,151,165,${a * 0.9})` : `rgba(90,90,105,${a * 0.9})`;
+          ctx.fillText(`${n.ins} in · ${n.outs} out · ${n.lines} lines`, n.px, below + 12);
+        }
       }
       if (f.group && mods.length > 1 && cam.k < 0.9) {
         const cs = mods.map(() => ({ x: 0, y: 0, n: 0, top: Infinity }));
@@ -475,6 +509,10 @@
       <button class:on={!f.three} onclick={() => (f.three = false)}>2D</button>
       <button class:on={f.three} onclick={() => (f.three = true)}>3D</button>
     </div>
+    <select class="pick sm" bind:value={f.sizeBy} title="What the size of a dot shows">
+      <option value="links">Size: links</option><option value="in">Size: used by</option><option value="out">Size: uses</option>
+      <option value="lines">Size: lines</option><option value="members">Size: members</option>
+    </select>
     <div class="seg">
       {#each [['plain', 'Plain'], ['kind', 'Kind'], ['service', 'Service'], ['issues', 'Issues']] as [v, l]}
         <button class:on={f.colour === v} onclick={() => (f.colour = v as typeof f.colour)}>{l}</button>
@@ -494,6 +532,7 @@
       <label class="tog"><input type="checkbox" bind:checked={f.tests} /> Show tests</label>
       <label class="tog"><input type="checkbox" bind:checked={f.orphans} /> Show orphans ({orphans})</label>
       <label class="tog"><input type="checkbox" bind:checked={f.linkColour} /> Colour links by kind</label>
+      <label class="tog"><input type="checkbox" bind:checked={f.meta} /> In, out and lines under names</label>
       <button class="reset" onclick={() => (f = { ...DEFAULTS })}>Reset</button>
     </div>
   {/if}
@@ -513,6 +552,11 @@
       {#each ['critical', 'high', 'medium'] as s}<span><i style:background={SEV_COL[s]}></i>{s}</span>{/each}<span><i style:background="#6b6b76"></i>no open issue</span>
     {/if}
     <span class="sep"></span>
+    <span class="ln"><svg width="12" height="12"><circle cx="6" cy="6" r="5" fill="currentColor" /></svg>class</span>
+    <span class="ln"><svg width="12" height="12"><circle cx="6" cy="6" r="4" fill="none" stroke="currentColor" stroke-width="2" /></svg>interface</span>
+    <span class="ln"><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="4" fill="currentColor" /></svg>record</span>
+    <span class="ln"><svg width="12" height="12"><path d="M6 0 L12 6 L6 12 L0 6 Z" fill="currentColor" /></svg>enum</span>
+    <span class="sep"></span>
     {#each [['injects', 'injects', ''], ['uses', 'uses', ''], ['extends', 'extends', '5 4'], ['implements', 'implements', '2 3'], ['feign', 'HTTP call', '8 4']] as [k, l, dash]}
       <span class="ln"><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke={f.linkColour ? `rgb(${LINK_COL[k as GraphEdge['kind']]})` : 'currentColor'} stroke-width="1.5" stroke-dasharray={dash} /></svg>{l}</span>
     {/each}
@@ -523,8 +567,8 @@
   {#if hover && hover !== picked}
     <div class="hovercard" style:left="{Math.min(mouse.x + 16, (wrap?.clientWidth ?? 800) - 260)}px" style:top="{mouse.y + 16}px">
       <div class="hc-t"><i style:background={KIND_COL[hover.g.stereotype] ?? KIND_COL.other}></i><b>{hover.label}</b></div>
-      <div class="hc-s">{STEREOTYPE[hover.g.stereotype]?.label ?? hover.g.stereotype}{hover.g.module ? ` · ${hover.g.module}` : ''}</div>
-      <div class="hc-n"><span>uses <b>{hover.outs}</b></span><span>used by <b>{hover.ins}</b></span><span>methods <b>{hover.g.members.filter((m) => m.kind !== 'field').length}</b></span>{#if hover.issues}<span class="bad">issues <b>{hover.issues}</b></span>{/if}</div>
+      <div class="hc-s">{KINDNAME[hover.g.kind] ?? hover.g.kind} · {STEREOTYPE[hover.g.stereotype]?.label ?? hover.g.stereotype}{hover.g.module ? ` · ${hover.g.module}` : ''}</div>
+      <div class="hc-n"><span>uses <b>{hover.outs}</b></span><span>used by <b>{hover.ins}</b></span><span>methods <b>{hover.g.members.filter((m) => m.kind !== 'field').length}</b></span><span>lines <b>{hover.lines}</b></span>{#if hover.issues}<span class="bad">issues <b>{hover.issues}</b></span>{/if}</div>
     </div>
   {/if}
 
@@ -536,6 +580,7 @@
         <button class="x" aria-label="Close" onclick={() => (picked = null)}>×</button>
       </header>
       <div class="tags">
+        <span class="kind">{GLYPH[picked.g.kind] ?? 'C'} · {KINDNAME[picked.g.kind] ?? picked.g.kind}</span>
         <span>{STEREOTYPE[picked.g.stereotype]?.label ?? picked.g.stereotype}</span>
         {#if picked.g.module}<span>{picked.g.module}</span>{/if}
         {#each picked.g.annotations.slice(0, 4) as a}<span class="mono">@{a.replace(/^@/, '')}</span>{/each}
@@ -545,6 +590,7 @@
         <div><b>{details.usedBy.length}</b><span>used by</span></div>
         <div><b>{details.methods.length}</b><span>methods</span></div>
         <div><b>{details.fields}</b><span>fields</span></div>
+        <div><b>{picked.lines}</b><span>lines</span></div>
         <div class:bad={details.issues.length}><b>{details.issues.length}</b><span>open issues</span></div>
       </div>
       <div class="two">
@@ -578,17 +624,27 @@
         </ul>
         {#if details.methods.length > 8}<button class="more" onclick={() => (showAllMethods = !showAllMethods)}>{showAllMethods ? 'Fewer' : `All ${details.methods.length}`}</button>{/if}
       {/if}
-      <p class="file mono">{picked.g.file}:{picked.g.startLine}</p>
+      <h3>File</h3>
+      <dl class="meta">
+        <dt>Path</dt><dd class="mono">{picked.g.file}</dd>
+        <dt>Lines</dt><dd>{picked.g.startLine}–{picked.g.endLine} ({picked.lines})</dd>
+        <dt>Members</dt><dd>{details.methods.filter((m) => m.kind === 'method').length} methods · {details.methods.filter((m) => m.kind === 'constructor').length} constructors · {details.fields} fields</dd>
+        {#if picked.g.annotations.length}<dt>Annotations</dt><dd class="mono">{picked.g.annotations.map((a) => '@' + a.replace(/^@/, '')).join('  ')}</dd>{/if}
+        <dt>Links</dt><dd>{picked.ins} in · {picked.outs} out</dd>
+      </dl>
     </aside>
   {/if}
 </div>
 
 <style>
   .map { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--map-bg, var(--canvas)); }
+  /* A faint light in the middle of the graph, as if it lit the room. */
+  .map::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(55% 55% at 50% 50%, rgba(124, 100, 255, 0.07), transparent 70%); }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
   .hud { position: absolute; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .tl { top: 14px; left: 14px; flex-direction: column; align-items: flex-start; }
   .row { display: flex; gap: 8px; }
+  .pick.sm { height: 32px; font-size: 12px; }
   .pick { height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--glass); color: var(--text); box-shadow: var(--elev-1); font: 13px var(--font); max-width: 220px; }
   .facts { flex-wrap: nowrap; white-space: nowrap; }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -638,9 +694,9 @@
   .x { margin-left: auto; border: 0; background: none; font-size: 20px; line-height: 1; color: var(--text-3); }
   .tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
   .tags span { padding: 2px 8px; border-radius: 99px; font-size: 11px; color: var(--text-2); background: var(--surface-2); box-shadow: inset 0 1px 0 var(--edge); }
-  .nums { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 4px 0 6px; }
+  .nums { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 4px 0 6px; }
   .nums div { display: flex; flex-direction: column; align-items: center; padding: 8px 4px; border-radius: 10px; background: var(--surface-2); box-shadow: inset 0 1px 0 var(--edge), 0 2px 0 rgba(0, 0, 0, 0.3); }
-  .nums b { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; } .nums span { font-size: 10.5px; color: var(--text-3); }
+  .nums b { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; } .nums span { font-size: 10.5px; color: var(--text-3); }
   .nums .bad b { color: #ff8f40; }
   h3 { margin: 18px 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
   h3 small { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; }
@@ -655,5 +711,7 @@
   .methods small { color: var(--text-3); text-align: right; }
   .more { margin-top: 6px; border: 0; background: none; padding: 0; color: var(--accent-text); font-size: 12px; }
   .two { display: flex; gap: 8px; margin: 12px 0 2px; } .two .b3 { flex: 1; justify-content: center; }
-  .file { margin: 18px 0 0; font-size: 11px; color: var(--text-3); word-break: break-all; }
+  .meta { display: grid; grid-template-columns: 92px 1fr; gap: 6px 10px; margin: 0; font-size: 12px; }
+  .meta dt { color: var(--text-3); } .meta dd { margin: 0; color: var(--text-2); word-break: break-word; }
+  .tags .kind { color: var(--text); font-weight: 600; }
 </style>

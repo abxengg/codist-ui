@@ -25,11 +25,11 @@
 <style>
   .card { --c: var(--text-3); border-radius: 14px; background: var(--glass, var(--surface)); border: 1px solid var(--border);
     box-shadow: var(--elev-1); transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s; overflow: hidden; container-type: inline-size; }
-  .card:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--elev-2); }
+  .card:hover { border-color: color-mix(in srgb, var(--c) 45%, var(--border)); transform: translateY(-1px); box-shadow: var(--elev-2), 0 0 34px -12px color-mix(in srgb, var(--c) 60%, transparent); }
   .sev-critical { --c: var(--sev-critical); } .sev-high { --c: var(--sev-high); } .sev-medium { --c: var(--sev-medium); }
   .sev-low, .sev-info { --c: var(--sev-low); }
   .head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; background: none; text-align: left; }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px color-mix(in srgb, var(--c) 70%, transparent); flex-shrink: 0; }
   .title { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; font-size: 11.5px; color: var(--text-3); }
   .ai { padding: 1px 7px; border-radius: 99px; font-weight: 600; color: #fff; background: var(--accent); }

@@ -1,13 +1,18 @@
 <script lang="ts">
   // One issue, in focus: the page behind blurs, the code sits in the middle, and what to know about it floats around
   // it: what is wrong and why, the suggestion, where it came from, and what you can do. Esc or a click outside closes.
-  import { fade, scale } from 'svelte/transition';
+  import { fade, fly, scale } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
   import { app, api_feedback, issueAction, proposeFix, selectCommit } from '../lib/store.svelte';
   import { ago, INSTANT_REFS } from '../lib/theme';
   import CodePeek from './CodePeek.svelte';
   import type { FindingWithPath, FixRef, Issue } from '../lib/types';
 
-  const g = $derived(app.focus);
+  // The issue on show. It stays set while the view animates away, so the closing animation has something to show.
+  let held = $state.raw<Issue[] | null>(null);
+  $effect(() => { if (app.focus) held = app.focus; });
+  const g = $derived(held);
+  const open = $derived(!!app.focus);
   const i = $derived(g?.[0] ?? null);
   const sha = $derived(i && i.lastSeen && i.lastSeen !== 'working' ? i.lastSeen : null);
   let judged = $state<'' | 'useful' | 'wrong'>('');
@@ -26,30 +31,65 @@
   async function act(what: 'fixed' | 'reopen') { if (g) { await issueAction(g, what); close(); } }
   function fix() { if (g && i) { proposeFix(asFinding(i), i.lastSeen, others(g)); close(); } }
   const SEV: Record<string, string> = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low', info: 'Info' };
+
+  // Lines from the floating cards to what they are about, redrawn every frame while the cards drift.
+  let stage: HTMLDivElement | undefined = $state();
+  let paths = $state<{ d: string; key: string }[]>([]);
+  $effect(() => {
+    if (!g || !stage) return;
+    let raf = 0;
+    const box = (el: Element | null) => el?.getBoundingClientRect() ?? null;
+    const draw = () => {
+      const code = stage!.querySelector('.code'), hit = stage!.querySelector('.code .ln.hit'), path = stage!.querySelector('.code .path');
+      const target = box(hit) ?? box(code);
+      const out: { d: string; key: string }[] = [];
+      const link = (card: Element | null, to: DOMRect | null, key: string, toLeftEdge = true) => {
+        const c = box(card);
+        if (!c || !to) return;
+        const fromLeft = c.left > to.left + to.width / 2; // the card is on the right
+        const x1 = fromLeft ? c.left : c.right, y1 = c.top + Math.min(28, c.height / 2);
+        const x2 = toLeftEdge ? (fromLeft ? to.right - 18 : to.left + 22) : to.left + to.width / 2, y2 = to.top + to.height / 2;
+        const dx = Math.max(40, Math.abs(x2 - x1) * 0.5) * (fromLeft ? -1 : 1);
+        out.push({ key, d: `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}` });
+      };
+      link(stage!.querySelector('.n-wrong'), target, 'wrong');
+      link(stage!.querySelector('.n-fix'), target, 'fix');
+      link(stage!.querySelector('.n-from'), box(path), 'from');
+      link(stage!.querySelector('.n-places'), box(code), 'places');
+      paths = out;
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  });
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && g && close()} />
+<svelte:window onkeydown={(e) => e.key === 'Escape' && open && close()} />
 
-{#if g && i}
-  <div class="scrim" transition:fade={{ duration: 160 }} onclick={close} role="presentation"></div>
-  <div class="stage sev-{i.severity}" role="dialog" aria-modal="true" aria-label={i.title}>
-    <header class="title float f1" in:scale={{ start: 0.96, duration: 200 }}>
+{#if open && g && i}
+  <div class="scrim" transition:fade={{ duration: 260, easing: cubicOut }} onclick={close} role="presentation"></div>
+  <svg class="wires sev-{i.severity}" aria-hidden="true" in:fade|global={{ duration: 400, delay: 220 }} out:fade|global={{ duration: 120 }}>
+    <defs><marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" /></marker></defs>
+    {#each paths as p (p.key)}<path class="wire" d={p.d} marker-end="url(#arrowhead)" />{/each}
+  </svg>
+  <div class="stage sev-{i.severity}" bind:this={stage} role="dialog" aria-modal="true" aria-label={i.title}>
+    <header class="title float f1" transition:fly|global={{ y: -16, duration: 300, easing: cubicOut }}>
       <span class="badge">{SEV[i.severity]}</span>
       {#if i.source === 'llm'}<span class="src ai">Found by AI</span>{:else}<span class="src">Code check{i.ref ? ` · ${i.ref}` : ''}</span>{/if}
       <h2>{i.title}</h2>
       <button class="x" aria-label="Close" onclick={close}>×</button>
     </header>
 
-    <section class="code" in:scale={{ start: 0.94, duration: 240 }}>
+    <section class="code" transition:scale|global={{ start: 0.94, opacity: 0, duration: 320, easing: cubicOut }}>
       <div class="path mono">{i.path}<b>:{i.line}</b></div>
       <CodePeek path={i.path} {sha} line={i.reviewLine || i.line} around={9} />
     </section>
 
     <aside class="left">
       {#if i.detail}
-        <div class="note float f2" in:scale={{ start: 0.9, duration: 260, delay: 60 }}><h3>What goes wrong</h3><p>{i.detail}</p></div>
+        <div class="note n-wrong float f2" in:fly|global={{ x: -28, duration: 340, delay: 140, easing: cubicOut }} out:fly|global={{ x: -20, duration: 200, easing: cubicOut }}><h3>What goes wrong</h3><p>{i.detail}</p></div>
       {/if}
-      <div class="note float f3" in:scale={{ start: 0.9, duration: 260, delay: 120 }}>
+      <div class="note n-from float f3" in:fly|global={{ x: -28, duration: 340, delay: 200, easing: cubicOut }} out:fly|global={{ x: -20, duration: 200, easing: cubicOut }}>
         <h3>Where it came from</h3>
         {#if i.firstSeen === 'baseline'}<p>Already in the code when Codist first ran.</p>
         {:else if i.firstSeen && i.firstSeen !== 'working'}
@@ -61,15 +101,15 @@
 
     <aside class="right">
       {#if i.suggestion}
-        <div class="note float f4" in:scale={{ start: 0.9, duration: 260, delay: 90 }}><h3>Suggestion</h3><p>{i.suggestion}</p></div>
+        <div class="note n-fix float f4" in:fly|global={{ x: 28, duration: 340, delay: 170, easing: cubicOut }} out:fly|global={{ x: 20, duration: 200, easing: cubicOut }}><h3>Suggestion</h3><p>{i.suggestion}</p></div>
       {/if}
       {#if g.length > 1}
-        <div class="note float f5" in:scale={{ start: 0.9, duration: 260, delay: 150 }}>
+        <div class="note n-places float f5" in:fly|global={{ x: 28, duration: 340, delay: 230, easing: cubicOut }} out:fly|global={{ x: 20, duration: 200, easing: cubicOut }}>
           <h3>Same problem in {g.length} places</h3>
           <ul>{#each g as m}<li class="mono">{m.path.slice(m.path.lastIndexOf('/') + 1)}:{m.line}</li>{/each}</ul>
         </div>
       {/if}
-      <div class="note actions float f6" in:scale={{ start: 0.9, duration: 260, delay: 180 }}>
+      <div class="note actions float f6" in:fly|global={{ x: 28, duration: 340, delay: 260, easing: cubicOut }} out:fly|global={{ x: 20, duration: 200, easing: cubicOut }}>
         <h3>Do</h3>
         {#if i.state === 'open'}
           {#if app.status?.canFix !== false}<button class="b3 primary" onclick={fix}>{i.ref && INSTANT_REFS.has(i.ref) ? 'Fix' : 'Fix with AI'}</button>{/if}
@@ -92,9 +132,14 @@
 <style>
   .scrim { position: fixed; inset: 0; z-index: 60; background: rgba(6, 6, 10, 0.68); backdrop-filter: blur(18px) saturate(0.8); -webkit-backdrop-filter: blur(18px) saturate(0.8); }
   :global([data-theme='light']) .scrim { background: rgba(240, 240, 246, 0.6); }
-  .stage { --c: var(--sev-medium); position: fixed; inset: 0; z-index: 61; pointer-events: none; display: grid;
-    grid-template-columns: minmax(200px, 300px) minmax(0, 760px) minmax(200px, 300px); grid-template-rows: auto auto;
-    justify-content: center; align-content: center; gap: 22px 26px; padding: 32px; }
+  .wires { --c: var(--sev-medium); position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 63; pointer-events: none; overflow: visible; }
+  .wire { fill: none; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c) 80%, transparent)); stroke: color-mix(in srgb, var(--c) 75%, transparent); stroke-width: 1.6; stroke-dasharray: 5 4; animation: flow 1.2s linear infinite; }
+  .wires marker path { fill: var(--c); }
+  @keyframes flow { to { stroke-dashoffset: -8; } }
+  @media (prefers-reduced-motion: reduce) { .wire { animation: none; } }
+  .stage { --c: var(--sev-medium); position: fixed; inset: 0; z-index: 62; pointer-events: none; display: grid;
+    grid-template-columns: minmax(200px, 280px) minmax(0, 700px) minmax(200px, 280px); grid-template-rows: auto auto;
+    justify-content: center; align-content: center; gap: 26px 72px; padding: 32px; }
   .stage > * { pointer-events: auto; }
   .sev-critical { --c: var(--sev-critical); } .sev-high { --c: var(--sev-high); } .sev-low, .sev-info { --c: var(--sev-low); }
   .title { grid-column: 1 / -1; justify-self: center; max-width: 900px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
@@ -104,12 +149,12 @@
   .src { font-size: 12px; color: var(--text-3); } .src.ai { color: var(--accent-text); font-weight: 600; }
   .x { margin-left: auto; border: 0; background: none; font-size: 22px; line-height: 1; color: var(--text-3); }
   .code { grid-column: 2; grid-row: 2; align-self: center; border-radius: 16px; padding: 12px; background: var(--glass-strong);
-    border: 1px solid color-mix(in srgb, var(--c) 40%, var(--border)); box-shadow: var(--elev-2), 0 0 0 1px rgba(0, 0, 0, 0.2); }
+    border: 1px solid color-mix(in srgb, var(--c) 45%, var(--border)); box-shadow: var(--elev-2), 0 0 0 1px rgba(0, 0, 0, 0.2), 0 0 90px -20px color-mix(in srgb, var(--c) 55%, transparent); }
   .code :global(.peek) { font-size: 13px; }
   .path { font-size: 12px; color: var(--text-3); padding: 2px 4px 10px; word-break: break-all; } .path b { color: var(--text); font-weight: 600; }
   .left { grid-column: 1; grid-row: 2; align-self: center; display: flex; flex-direction: column; gap: 16px; }
   .right { grid-column: 3; grid-row: 2; align-self: center; display: flex; flex-direction: column; gap: 16px; }
-  .note { padding: 14px 16px; border-radius: 14px; background: var(--glass-strong); border: 1px solid var(--border); box-shadow: var(--elev-2); }
+  .note { padding: 14px 16px; border-radius: 14px; background: var(--glass-strong); border: 1px solid var(--border); box-shadow: var(--elev-2), 0 0 40px -18px color-mix(in srgb, var(--c) 40%, transparent); }
   .note h3 { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
   .note p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text-2); }
   .note p + p { margin-top: 6px; }

@@ -46,14 +46,14 @@
     background: var(--rail-bg, var(--sidebar)); border-right: 1px solid var(--border); box-shadow: 8px 0 30px -18px rgba(0, 0, 0, 0.8); position: relative; z-index: 20; }
   .mark { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 4px 0; border: 0; background: none; }
   .word { font-size: 10.5px; font-weight: 650; letter-spacing: 0.02em; color: var(--text); }
-  .dotmark { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
+  .dotmark { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px 2px rgba(139, 116, 255, 0.6); }
   .items { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
   .item { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 12px; background: none;
     color: var(--text-3); transition: background 0.2s, color 0.2s; }
   .item:hover { color: var(--text); background: var(--hover); }
-  .item.on { color: var(--text); background: var(--surface-3); box-shadow: inset 0 1px 0 var(--edge), 0 2px 0 rgba(0, 0, 0, 0.4), 0 6px 14px -6px rgba(0, 0, 0, 0.6); }
+  .item.on { color: #fff; background: var(--surface-3); box-shadow: inset 0 1px 0 var(--edge), 0 2px 0 rgba(0, 0, 0, 0.4), 0 6px 14px -6px rgba(0, 0, 0, 0.6), var(--glow); }
   .item.on::before { content: ''; position: absolute; left: -10px; top: 10px; bottom: 10px; width: 3px; border-radius: 3px;
-    background: var(--accent); }
+    background: var(--accent); box-shadow: 0 0 10px 1px rgba(139, 116, 255, 0.8); }
   .item.small { width: 32px; height: 32px; }
   .tip { position: absolute; left: 50px; top: 50%; transform: translateY(-50%) translateX(-4px); padding: 4px 9px; border-radius: 8px;
     background: var(--surface-3); color: var(--text); font-size: 12px; white-space: nowrap; opacity: 0; pointer-events: none;
