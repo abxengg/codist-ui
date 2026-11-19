@@ -29,7 +29,7 @@
     app.mode = 'commits';
   }
   async function act(what: 'fixed' | 'reopen') { if (g) { await issueAction(g, what); close(); } }
-  function fix() { if (g && i) { proposeFix(asFinding(i), i.lastSeen, others(g)); close(); } }
+  function fix() { if (g && i) { proposeFix(asFinding(i), i.lastSeen, others(g), g); close(); } }
   // Fixing needs the model, and the branch you look at checked out. Say which is missing rather than hide the button.
   const canFix = $derived(app.status?.canFix !== false);
   const whyNot = $derived(app.status?.viewing ? 'Switch to this branch to fix it here.' : app.status?.llmProblem ? `Needs the AI model: ${app.status.llmProblem}` : 'Fixing is not available right now.');

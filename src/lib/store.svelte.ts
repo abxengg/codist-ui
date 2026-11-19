@@ -95,7 +95,12 @@ class AppState {
   focusLine = $state<{ line: number; nonce: number } | null>(null);
 
   /** The fix dialog: generating, showing a proposal for approval, or an error. */
-  fix = $state.raw<{ finding: FindingWithPath; sha: string; busy: 'generating' | 'applying' | null; proposal: FixProposal | null; error: string | null } | null>(null);
+  fix = $state.raw<{ finding: FindingWithPath; sha: string; busy: 'generating' | 'applying' | null; proposal: FixProposal | null; error: string | null;
+    started?: number; done?: string; issues?: Issue[] } | null>(null);
+  /** The new screens show an opened file over the page rather than in a side panel. */
+  fileShown = $state(false);
+  /** The fix is being prepared in the background: the window is closed and a bubble shows its progress. */
+  fixHidden = $state(false);
 
   showIgnored = $state(false);
   mode = $state<Mode>('review');
@@ -582,13 +587,17 @@ export async function requestEdit(instruction: string) {
   }
 }
 
-export async function proposeFix(finding: FindingWithPath, fromSha?: string, also: FixRef[] = []) {
+export async function proposeFix(finding: FindingWithPath, fromSha?: string, also: FixRef[] = [], issues?: Issue[]) {
   const sha = fromSha ?? app.selectedSha;
   if (!sha) return;
-  app.fix = { finding, sha, busy: 'generating', proposal: null, error: null };
+  app.fix = { finding, sha, busy: 'generating', proposal: null, error: null, started: Date.now(), issues };
+  app.fixHidden = false;
   try {
     const proposal = await api.proposeFix({ sha, path: finding.path, line: finding.line, title: finding.title, also });
-    if (app.fix?.finding === finding) app.fix = { ...app.fix, busy: null, proposal };
+    if (app.fix?.finding === finding) {
+      app.fix = { ...app.fix, busy: null, proposal };
+      if (app.fixHidden) toast(`Fix ready: ${finding.title}`, 'good', 5000);
+    }
   } catch (e) {
     if (app.fix?.finding === finding) app.fix = { ...app.fix, busy: null, error: (e as Error).message };
   }
@@ -615,7 +624,11 @@ export async function applyFix(message: string) {
   app.fix = { ...f, busy: 'applying', error: null };
   try {
     const { commit } = await api.applyFix(f.proposal.id, message);
-    app.fix = null;
+    // Hold the window a moment on the result, so the change is seen to land, then close.
+    app.fix = { ...f, busy: null, done: commit || 'working' };
+    // You approved a fix for these issues: count them as fixed. A later review that still finds one reopens it.
+    if (commit && f.issues?.length) await Promise.all(f.issues.map((i) => api.markFixed(i.id).catch(() => {})));
+    setTimeout(() => { if (app.fix?.done) { app.fix = null; app.fixHidden = false; } }, 2200);
     if (commit) {
       toast(`Committed ${commit.slice(0, 7)} · reviewing the fix`, 'good', 5000);
     }
@@ -669,6 +682,7 @@ export function closeFix() {
   const id = app.fix?.proposal?.id;
   if (id) void api.discardFix(id);
   app.fix = null;
+  app.fixHidden = false;
 }
 
 export function fileInCommit(path: string): boolean {
@@ -688,7 +702,8 @@ export async function openFile(path: string, sha: string | null, line: number | 
   }
   if (switchTab) {
     app.tab = 'code';
-    reveal();
+    if (['now', 'issues', 'commits', 'map'].includes(app.mode)) app.fileShown = true;
+    else reveal();
   }
   if (line) app.focusLine = { line, nonce: Math.random() };
 }

@@ -12,7 +12,7 @@
     e.stopPropagation();
     const f = { line: i.reviewLine, endLine: i.reviewLine, severity: i.severity, category: i.category, title: i.title, detail: i.detail,
       suggestion: i.suggestion, nodeId: '', onChangedLine: true, source: i.source, ref: i.ref, snippet: i.snippet, path: i.path } as FindingWithPath;
-    proposeFix(f, i.lastSeen, g.slice(1).map((m) => ({ sha: m.lastSeen, path: m.path, line: m.reviewLine, title: m.title })));
+    proposeFix(f, i.lastSeen, g.slice(1).map((m) => ({ sha: m.lastSeen, path: m.path, line: m.reviewLine, title: m.title })), g);
   }
 </script>
 

@@ -3,6 +3,9 @@
   import { cubicOut } from 'svelte/easing';
   import { live } from '../lib/live.svelte';
   import Orb from './Orb.svelte';
+  import CodePeek from './CodePeek.svelte';
+  import { tokenize, type Line } from '../lib/highlight';
+  import { STEREOTYPE } from '../lib/theme';
   import type { FixCheck } from '../lib/types';
   import { app, applyFix, closeFix, toast } from '../lib/store.svelte';
   import { api } from '../lib/api';
@@ -100,7 +103,9 @@
 
   function key(e: KeyboardEvent) {
     if (!app.fix) return;
-    if (e.key === 'Escape' && app.fix.busy !== 'applying') closeFix();
+    if (app.fixHidden) return;
+    if (e.key === 'Escape' && app.fix.busy === 'generating') { app.fixHidden = true; return; }
+    if (e.key === 'Escape' && app.fix.busy !== 'applying' && !app.fix.done) closeFix();
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && app.fix.proposal && !app.fix.busy) void applyFix(message);
   }
 
@@ -142,25 +147,86 @@
     return () => cancelAnimationFrame(raf);
   });
   const ease = { easing: cubicOut };
+
+  // While waiting: the classes in this file, what depends on them and what they use, from the code graph.
+  const here = $derived.by(() => {
+    const f = app.fix, g = app.graph;
+    if (!f || !g) return null;
+    const mine = g.nodes.filter((n) => n.file === f.finding.path);
+    if (!mine.length) return null;
+    const ids = new Set(mine.map((n) => n.id));
+    const byId = new Map(g.nodes.map((n) => [n.id, n]));
+    const users = [...new Set(g.edges.filter((e) => ids.has(e.target) && !ids.has(e.source)).map((e) => e.source))].map((id) => byId.get(id)!).filter(Boolean);
+    const uses = [...new Set(g.edges.filter((e) => ids.has(e.source) && !ids.has(e.target)).map((e) => e.target))].map((id) => byId.get(id)!).filter(Boolean);
+    return { cls: mine[0], users, uses };
+  });
+
+  const signOf = (l: string) => (l.startsWith('+') || l.startsWith('-') ? l[0] : ' ');
+  const isHead = (l: string) => l.startsWith('file ') || l.startsWith('@@');
+  const bodyOf = (l: string) => (isHead(l) ? l : l.slice(1));
+  // Syntax colours for the change: each side is coloured as a whole, so a line split over cells still reads right.
+  let oldTok = $state<Line[] | null>(null), newTok = $state<Line[] | null>(null), uniTok = $state<Line[] | null>(null);
+  $effect(() => {
+    const r = rows, l = lines, theme = app.theme;
+    const lang = (app.fix?.finding.path ?? '').endsWith('.java') ? 'java' : null;
+    oldTok = newTok = uniTok = null;
+    if (!r.length) return;
+    void tokenize(r.map(([o]) => o.text).join('\n'), lang, theme).then((t) => { if (r === rows) oldTok = t; });
+    void tokenize(r.map(([, n]) => n.text).join('\n'), lang, theme).then((t) => { if (r === rows) newTok = t; });
+    void tokenize(l.map((x) => (/^[+\- ]/.test(x) ? x.slice(1) : x)).join('\n'), lang, theme).then((t) => { if (l === lines) uniTok = t; });
+  });
+
 </script>
 
 <svelte:window onkeydown={key} />
 
-{#if app.fix}
+{#if app.fix && !app.fixHidden}
   {@const f = app.fix}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="scrim" transition:fade={{ duration: 260, ...ease }} onclick={() => { if (!f.busy && !f.proposal) closeFix(); }}></div>
+  <div class="scrim" transition:fade={{ duration: 260, ...ease }} onclick={() => { if (f.busy === 'generating') app.fixHidden = true; else if (!f.busy && !f.proposal) closeFix(); }}></div>
 
   {#if f.busy === 'generating' || (!f.proposal && !f.error)}
-    <!-- Waiting: the orb at work in the middle, what it is doing under it. -->
-    <div class="wait" role="dialog" aria-modal="true" aria-label="Preparing a fix" transition:scale={{ start: 0.94, opacity: 0, duration: 320, ...ease }}>
-      <Orb mood={words ? 'writing' : 'reading'} size={150} label="Preparing a fix" />
-      <p class="kicker">Preparing a fix</p>
-      <h2>{f.finding.title}</h2>
-      <p class="where mono">{f.finding.path}{f.finding.line ? ':' + f.finding.line : ''}</p>
-      <p class="progress">{phase} · {secs} s{words ? ` · ${words} words written` : ''} · {app.status?.model ?? 'the model'}</p>
-      <p class="hint">Usually 20 to 60 seconds. Esc or Cancel stops the model.</p>
-      <button class="b3" onclick={closeFix}>Cancel</button>
+    <!-- Waiting: the orb at work in the middle, the code it is reading on the left, what depends on it on the right. -->
+    <div class="waitgrid" role="dialog" aria-modal="true" aria-label="Preparing a fix">
+      <section class="wcode" in:fly|global={{ x: -30, duration: 360, delay: 80, ...ease }} out:fly|global={{ x: -20, duration: 200 }}>
+        <h3>The code it is reading</h3>
+        <CodePeek path={f.finding.path} sha={f.sha} line={f.finding.line || 1} around={8} />
+      </section>
+      <div class="wait" transition:scale|global={{ start: 0.94, opacity: 0, duration: 320, ...ease }}>
+        <Orb mood={words ? 'writing' : 'reading'} size={130} label="Preparing a fix" />
+        <p class="kicker">Preparing a fix</p>
+        <h2>{f.finding.title}</h2>
+        <p class="where mono">{f.finding.path.split('/').pop()}{f.finding.line ? ':' + f.finding.line : ''}</p>
+        <p class="progress">{phase} · {secs} s{words ? ` · ${words} words written` : ''} · {app.status?.model ?? 'the model'}</p>
+        <p class="hint">Usually 20 to 60 seconds. Keep working: a bubble will say when it is ready.</p>
+        <div class="wbtns">
+          <button class="b3 primary" onclick={() => (app.fixHidden = true)}>Keep working</button>
+          <button class="b3" onclick={closeFix}>Cancel</button>
+        </div>
+      </div>
+      <aside class="wside" in:fly|global={{ x: 30, duration: 360, delay: 120, ...ease }} out:fly|global={{ x: 20, duration: 200 }}>
+        {#if here}
+          <div class="note">
+            <h3>{here.cls.name}</h3>
+            <p>{STEREOTYPE[here.cls.stereotype]?.label ?? here.cls.stereotype} · {here.cls.kind}{here.cls.module ? ` · ${here.cls.module}` : ''} · {here.cls.endLine - here.cls.startLine + 1} lines</p>
+          </div>
+          {#if here.users.length}
+            <div class="note">
+              <h3>Depends on it · {here.users.length}</h3>
+              <ul class="deps">{#each here.users.slice(0, 8) as u}<li><span class="mono">{u.name}</span><small>{STEREOTYPE[u.stereotype]?.label ?? ''}</small></li>{/each}</ul>
+              {#if here.users.length > 8}<p class="more">and {here.users.length - 8} more</p>{/if}
+              <p class="foot">A fix here can change what these see.</p>
+            </div>
+          {/if}
+          {#if here.uses.length}
+            <div class="note">
+              <h3>It uses · {here.uses.length}</h3>
+              <ul class="deps">{#each here.uses.slice(0, 6) as u}<li><span class="mono">{u.name}</span><small>{STEREOTYPE[u.stereotype]?.label ?? ''}</small></li>{/each}</ul>
+            </div>
+          {/if}
+        {/if}
+        {#if f.finding.detail}<div class="note"><h3>The problem</h3><p>{f.finding.detail}</p></div>{/if}
+      </aside>
     </div>
   {:else}
     <svg class="wires" aria-hidden="true" in:fade|global={{ duration: 400, delay: 250 }} out:fade|global={{ duration: 120 }}>
@@ -179,7 +245,15 @@
       </header>
 
       {#if f.proposal}
-        <section class="change" transition:scale|global={{ start: 0.95, opacity: 0, duration: 320, ...ease }}>
+        <section class="change" class:applying={f.busy === 'applying'} class:landed={!!f.done} transition:scale|global={{ start: 0.95, opacity: 0, duration: 320, ...ease }}>
+          {#if f.busy === 'applying'}<div class="sweep" aria-hidden="true"></div><p class="applying-note">Applying {f.proposal.working ? 'to your working tree' : 'and committing'}…</p>{/if}
+          {#if f.done}
+            <div class="done" role="status">
+              <svg viewBox="0 0 52 52" width="64" height="64"><circle cx="26" cy="26" r="23" /><path d="M15 27 l8 8 l15 -17" /></svg>
+              <b>{f.done === 'working' ? 'Applied to your working tree' : `Committed ${f.done.slice(0, 7)}`}</b>
+              <span>{f.done === 'working' ? 'Commit it together with your changes.' : 'Codist is reviewing the fix now.'}</span>
+            </div>
+          {/if}
           <div class="diff-head">
             <span class="mono plus">+{stats.add}</span><span class="mono minus">−{stats.del}</span>
             <span class="grow"></span>
@@ -192,17 +266,17 @@
           {#if view === 'split'}
             <div class="split-head"><span>Now</span><span>After the fix</span></div>
             <div class="split-diff">
-              {#each rows as [o, n]}
+              {#each rows as [o, n], ri}
                 {#if o.kind === 'fileh' || o.kind === 'hunk'}
                   <div class="wide {o.kind}">{o.text}</div>
                 {:else}
-                  <div class="cell {o.kind}">{o.text || ' '}</div>
-                  <div class="cell {n.kind}">{n.text || ' '}</div>
+                  <div class="cell {o.kind}">{#if oldTok?.[ri]}{#each oldTok[ri] as t}<span style:color={t.color}>{t.content}</span>{/each}{:else}{o.text}{/if}{' '}</div>
+                  <div class="cell {n.kind}">{#if newTok?.[ri]}{#each newTok[ri] as t}<span style:color={t.color}>{t.content}</span>{/each}{:else}{n.text}{/if}{' '}</div>
                 {/if}
               {/each}
             </div>
           {:else}
-            <pre class="diff">{#each lines as l}<span class={cls(l)}>{l || ' '}</span>{/each}</pre>
+            <pre class="diff">{#each lines as l, li}<span class={cls(l)}><i class="sign">{signOf(l)}</i>{#if uniTok?.[li] && !isHead(l)}{#each uniTok[li] as t}<b style:color={t.color}>{t.content}</b>{/each}{:else}{bodyOf(l)}{/if}{' '}</span>{/each}</pre>
           {/if}
         </section>
 
@@ -344,4 +418,37 @@
     .stage { grid-template-columns: minmax(0, 1fr); align-content: start; }
     .change, .left, .right, .err { grid-column: 1; grid-row: auto; }
   }
+  .waitgrid { position: fixed; inset: 0; z-index: 71; display: grid; grid-template-columns: minmax(0, 520px) minmax(300px, 380px) minmax(240px, 320px);
+    justify-content: center; align-content: center; align-items: center; gap: 48px; padding: 28px; overflow: auto; pointer-events: none; }
+  .waitgrid > * { pointer-events: auto; }
+  .waitgrid .wait { position: static; transform: none; width: auto; max-width: none; }
+  .wcode, .wside .note { padding: 14px 16px; border-radius: 14px; background: var(--glass-strong); border: 1px solid var(--border); box-shadow: var(--elev-2), 0 0 40px -18px rgba(139, 124, 246, 0.4); }
+  .wcode h3 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+  .wcode :global(.peek) { font-size: 12px; }
+  .wside { display: flex; flex-direction: column; gap: 14px; }
+  .wbtns { display: flex; gap: 8px; }
+  .deps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .deps li { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; } .deps small { color: var(--text-3); }
+  .more, .foot { margin-top: 6px !important; font-size: 11.5px !important; color: var(--text-3) !important; }
+  @media (max-width: 1250px) { .waitgrid { grid-template-columns: minmax(0, 1fr); align-content: start; } }
+  .diff .sign { display: inline-block; width: 14px; font-style: normal; color: var(--text-3); }
+  .diff b { font-weight: inherit; }
+  /* Applying: a band of light sweeps down the change; the new side glows as it lands. */
+  .change { position: relative; overflow: hidden; }
+  .sweep { position: absolute; left: 0; right: 0; top: -30%; height: 30%; z-index: 2; pointer-events: none;
+    background: rgba(139, 124, 246, 0.12); box-shadow: 0 0 40px 10px rgba(139, 124, 246, 0.18); animation: sweep 1.1s ease-in-out infinite; }
+  @keyframes sweep { to { top: 100%; } }
+  .applying-note { position: absolute; z-index: 3; top: 12px; left: 50%; transform: translateX(-50%); margin: 0; padding: 4px 12px; border-radius: 99px;
+    font-size: 12px; background: var(--accent); color: #fff; box-shadow: var(--glow); }
+  .applying .cell.add, .applying .diff .add { animation: land 1.1s ease-in-out infinite; }
+  @keyframes land { 50% { background: color-mix(in srgb, var(--good) 34%, transparent); } }
+  .done { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    background: color-mix(in srgb, var(--glass-strong) 92%, transparent); animation: appear 0.3s ease-out; }
+  @keyframes appear { from { opacity: 0; } }
+  .done svg circle { fill: none; stroke: var(--good); stroke-width: 3; stroke-dasharray: 145; stroke-dashoffset: 145; animation: draw 0.6s ease-out forwards; }
+  .done svg path { fill: none; stroke: var(--good); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: draw 0.4s 0.45s ease-out forwards; }
+  .done svg { filter: drop-shadow(0 0 12px color-mix(in srgb, var(--good) 70%, transparent)); }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .done b { font-size: 16px; } .done span { font-size: 12.5px; color: var(--text-3); }
+  .landed { border-color: color-mix(in srgb, var(--good) 55%, var(--border)) !important; box-shadow: var(--elev-2), 0 0 90px -20px color-mix(in srgb, var(--good) 60%, transparent) !important; }
 </style>

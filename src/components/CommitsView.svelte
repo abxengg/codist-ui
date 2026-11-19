@@ -5,6 +5,7 @@
   import { ago } from '../lib/theme';
   import DiffReview from './DiffReview.svelte';
   import ReviewTab from './ReviewTab.svelte';
+  import BranchPicker from './BranchPicker.svelte';
 
   let q = $state('');
   let view = $state<'changes' | 'ai'>('changes');
@@ -23,6 +24,7 @@
 <svelte:window onkeydown={keys} />
 <div class="commits">
   <aside class="list">
+    <div class="branch">{#if app.featureOn('branchSwitcher')}<BranchPicker />{:else}<span class="mono">{app.status?.branch}</span>{/if}<span class="bh">Branch</span></div>
     <div class="tools">
       <input placeholder="Search commits…" bind:value={q} spellcheck="false" />
       <div class="seg">
@@ -66,6 +68,8 @@
 <style>
   .commits { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); }
   .list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--glass); box-shadow: 10px 0 30px -20px rgba(0, 0, 0, 0.8); position: relative; z-index: 1; }
+  .branch { display: flex; align-items: center; gap: 8px; padding: 12px 14px 0; }
+  .bh { margin-left: auto; font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
   .tools { display: flex; gap: 8px; padding: 14px; border-bottom: 1px solid var(--border); }
   .tools input { flex: 1; min-width: 0; height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; }
   .tools input:focus { outline: none; border-color: rgba(124, 92, 255, 0.6); }

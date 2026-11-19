@@ -10,6 +10,8 @@
   import LiveGraph from './components/LiveGraph.svelte';
   import StructureView from './components/StructureView.svelte';
   import IssueFocus from './components/IssueFocus.svelte';
+  import FixBubble from './components/FixBubble.svelte';
+  import FileView from './components/FileView.svelte';
   import { live } from './lib/live.svelte';
   import LeftDock from './components/LeftDock.svelte';
   import RepoView from './components/RepoView.svelte';
@@ -185,6 +187,8 @@
 
 <IssueFocus />
 <FixDialog />
+<FixBubble />
+<FileView />
 <Toasts />
 
 <style>

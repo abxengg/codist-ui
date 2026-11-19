@@ -398,9 +398,9 @@
         shape(n.g.kind, n.px, n.py, r, col);
         ctx.shadowBlur = 0;
         // The type's letter inside, the way an IDE marks them, once the dot is big enough to hold it.
-        if (r >= 7) {
-          ctx.fillStyle = n.g.kind === 'interface' ? col : 'rgba(10,10,16,0.82)';
-          ctx.font = `600 ${Math.round(r * 0.95)}px ${fam}`;
+        if (r >= 9) {
+          ctx.fillStyle = n.g.kind === 'interface' ? col : 'rgba(255,255,255,0.92)';
+          ctx.font = `600 ${Math.round(r * 0.9)}px ${fam}`;
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.fillText(GLYPH[n.g.kind] ?? 'C', n.px, n.py + 0.5);
           ctx.textBaseline = 'alphabetic';
@@ -434,14 +434,14 @@
         if (litNode) a = on || nb ? Math.max(a, lit) : a * (1 - 0.85 * lit);
         if (n === reading) a = 1;
         if (a < 0.03) continue;
-        ctx.fillStyle = dark ? `rgba(200,201,212,${a})` : `rgba(45,45,58,${a})`;
+        ctx.fillStyle = dark ? `rgba(205,206,218,${a})` : `rgba(28,28,38,${a})`;
         const below = n.py + n.r * f.size * Math.max(0.6, Math.min(2.4, cam.k)) * n.ps + 13;
-        ctx.font = `11px ${fam}`;
+        ctx.font = `500 11.5px ${fam}`;
         ctx.fillText(n.label, n.px, below);
         // A second, quieter line: links in and out, and the size of the class.
         if (f.meta && cam.k > 1.7) { // only when zoomed in, never just on hover
           ctx.font = `10px ${fam}`;
-          ctx.fillStyle = dark ? `rgba(150,151,165,${a * 0.9})` : `rgba(90,90,105,${a * 0.9})`;
+          ctx.fillStyle = dark ? `rgba(150,151,165,${a * 0.9})` : `rgba(80,80,96,${a * 0.9})`;
           ctx.fillText(`${n.ins} in · ${n.outs} out · ${n.lines} lines`, n.px, below + 12);
         }
       }
@@ -639,7 +639,7 @@
 <style>
   .map { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--map-bg, var(--canvas)); }
   /* A faint light in the middle of the graph, as if it lit the room. */
-  .map::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(55% 55% at 50% 50%, rgba(124, 100, 255, 0.07), transparent 70%); }
+  :global(:root:not([data-theme='light'])) .map::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(55% 55% at 50% 50%, rgba(124, 100, 255, 0.07), transparent 70%); }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
   .hud { position: absolute; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .tl { top: 14px; left: 14px; flex-direction: column; align-items: flex-start; }

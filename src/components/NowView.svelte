@@ -6,6 +6,7 @@
   import { groups, serious } from '../lib/groups';
   import { ago } from '../lib/theme';
   import Orb from './Orb.svelte';
+  import BranchPicker from './BranchPicker.svelte';
   import IssueCard from './IssueCard.svelte';
 
   const all = $derived(app.issueList?.issues ?? []);
@@ -27,7 +28,7 @@
 </script>
 
 <div class="now">
-  <div class="brandbar"><b>Codist</b><span>{app.status?.repo ?? ""}{app.status?.branch ? ` · ${app.status.branch}` : ""}</span></div>
+  <div class="brandbar"><b>Codist</b><span>{app.status?.repo ?? ""}</span>{#if app.featureOn('branchSwitcher')}<BranchPicker />{:else if app.status?.branch}<span>· {app.status.branch}</span>{/if}</div>
   <section class="hero">
     <div class="light" aria-hidden="true"></div>
     <Orb mood={live.mood} size={170} label={live.sentence} />
@@ -92,7 +93,7 @@
 
 <style>
   .now { flex: 1; min-height: 0; overflow: auto; padding: 0 clamp(16px, 4vw, 56px) 48px; }
-  .brandbar { display: flex; align-items: baseline; gap: 10px; padding: 20px 0 0; max-width: 1280px; margin: 0 auto; }
+  .brandbar { display: flex; align-items: center; gap: 10px; padding: 20px 0 0; max-width: 1280px; margin: 0 auto; }
   .brandbar b { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
   .brandbar span { font-size: 12.5px; color: var(--text-3); }
   .hero { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 36px 0 28px; }
