@@ -1,15 +1,22 @@
 <script lang="ts">
   // One issue as a row. Clicking it opens the issue in focus over the page (IssueFocus).
-  import { app } from '../lib/store.svelte';
+  import { app, proposeFix } from '../lib/store.svelte';
   import { ago } from '../lib/theme';
-  import type { Issue } from '../lib/types';
+  import type { FindingWithPath, Issue } from '../lib/types';
 
   let { g }: { g: Issue[]; open?: boolean } = $props();
   const i = $derived(g[0]);
   const file = $derived(i.path.slice(i.path.lastIndexOf('/') + 1));
+  // Fix straight from the list, without opening the issue.
+  function fix(e: Event) {
+    e.stopPropagation();
+    const f = { line: i.reviewLine, endLine: i.reviewLine, severity: i.severity, category: i.category, title: i.title, detail: i.detail,
+      suggestion: i.suggestion, nodeId: '', onChangedLine: true, source: i.source, ref: i.ref, snippet: i.snippet, path: i.path } as FindingWithPath;
+    proposeFix(f, i.lastSeen, g.slice(1).map((m) => ({ sha: m.lastSeen, path: m.path, line: m.reviewLine, title: m.title })));
+  }
 </script>
 
-<article class="card sev-{i.severity}">
+<article class="card sev-{i.severity}" class:fixable={i.state === 'open' && app.status?.canFix !== false}>
   <button class="head" onclick={() => (app.focus = g)} aria-haspopup="dialog">
     <span class="dot"></span>
     <span class="title">{i.title}</span>
@@ -20,6 +27,9 @@
       <span class="when">{i.firstTime ? ago(i.firstTime) : ''}</span>
     </span>
   </button>
+  {#if i.state === 'open' && app.status?.canFix !== false}
+    <button class="b3 primary quickfix" onclick={fix} title="Prepare a fix for this issue">Fix with AI</button>
+  {/if}
 </article>
 
 <style>
@@ -41,4 +51,8 @@
     .title { white-space: normal; flex-basis: calc(100% - 24px); }
     .meta { width: 100%; padding-left: 21px; }
     }
+  .card { position: relative; }
+  .quickfix { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); height: 28px; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+  .card:hover .quickfix, .quickfix:focus-visible { opacity: 1; pointer-events: auto; }
+  .fixable:hover .meta { opacity: 0; }
 </style>

@@ -30,6 +30,9 @@
   }
   async function act(what: 'fixed' | 'reopen') { if (g) { await issueAction(g, what); close(); } }
   function fix() { if (g && i) { proposeFix(asFinding(i), i.lastSeen, others(g)); close(); } }
+  // Fixing needs the model, and the branch you look at checked out. Say which is missing rather than hide the button.
+  const canFix = $derived(app.status?.canFix !== false);
+  const whyNot = $derived(app.status?.viewing ? 'Switch to this branch to fix it here.' : app.status?.llmProblem ? `Needs the AI model: ${app.status.llmProblem}` : 'Fixing is not available right now.');
   const SEV: Record<string, string> = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low', info: 'Info' };
 
   // Lines from the floating cards to what they are about, redrawn every frame while the cards drift.
@@ -112,7 +115,8 @@
       <div class="note actions float f6" in:fly|global={{ x: 28, duration: 340, delay: 260, easing: cubicOut }} out:fly|global={{ x: 20, duration: 200, easing: cubicOut }}>
         <h3>Do</h3>
         {#if i.state === 'open'}
-          {#if app.status?.canFix !== false}<button class="b3 primary" onclick={fix}>{i.ref && INSTANT_REFS.has(i.ref) ? 'Fix' : 'Fix with AI'}</button>{/if}
+          <button class="b3 primary" onclick={fix} disabled={!canFix} title={whyNot}>{i.ref && INSTANT_REFS.has(i.ref) ? 'Fix' : 'Fix with AI'}</button>
+          {#if !canFix}<p class="why-not">{whyNot}</p>{/if}
           <button class="b3" onclick={() => act('fixed')}>Mark fixed</button>
           <button class="b3" onclick={openCommit}>Open the commit</button>
           {#if i.source === 'llm'}
@@ -162,6 +166,8 @@
   .note ul { margin: 0; padding-left: 16px; font-size: 12px; color: var(--text-2); }
   .actions { display: flex; flex-direction: column; gap: 8px; }
   .actions .b3 { justify-content: center; }
+  .why-not { margin: -2px 0 4px; font-size: 11.5px; color: var(--text-3); text-align: center; }
+  .actions .b3:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
   .judge { display: flex; gap: 6px; } .judge .b3 { flex: 1; }
   .link { border: 0; background: none; padding: 0; color: var(--accent-text); }
   /* Floating: each card drifts slowly on its own rhythm. */
