@@ -28,8 +28,7 @@
 
 <div class="now">
   <section class="hero">
-    <div class="aura"></div>
-    <Orb mood={live.mood} size={220} label={live.sentence} />
+    <Orb mood={live.mood} size={140} label={live.sentence} />
     <h1>{live.sentence}</h1>
     <p class="sub">
       {#if live.call?.status === 'running'}
@@ -92,8 +91,6 @@
 <style>
   .now { flex: 1; min-height: 0; overflow: auto; padding: 0 clamp(16px, 4vw, 56px) 48px; }
   .hero { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 36px 0 28px; }
-  .aura { position: absolute; inset: -40px -10% auto; height: 420px; pointer-events: none;
-    background: radial-gradient(40% 50% at 50% 40%, rgba(124, 92, 255, 0.16), transparent 70%), radial-gradient(30% 40% at 62% 30%, rgba(56, 189, 248, 0.08), transparent 70%); }
   h1 { position: relative; margin: 18px 0 6px; font-size: clamp(22px, 2.6vw, 30px); font-weight: 600; letter-spacing: -0.02em; }
   .sub { position: relative; margin: 0; color: var(--text-2); font-size: 14px; }
   .sub b { color: var(--text); font-weight: 600; }
@@ -104,7 +101,7 @@
   .stat { transition: transform 0.2s, border-color 0.2s; }
   .stat b { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .stat span { font-size: 11.5px; color: var(--text-3); }
-  .grad { background: linear-gradient(135deg, #a78bfa, #38bdf8); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .grad { color: var(--accent-text); }
   .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 28px; max-width: 1280px; margin: 0 auto; }
   @media (max-width: 1000px) { .cols { grid-template-columns: 1fr; } }
   .block { margin-bottom: 24px; }
@@ -115,7 +112,7 @@
   .empty { color: var(--text-3); }
   .calm { display: flex; gap: 14px; align-items: center; padding: 18px; border-radius: 16px; border: 1px solid var(--border); background: var(--glass, var(--surface)); }
   .calm p { margin: 2px 0 0; color: var(--text-3); font-size: 12.5px; }
-  .ok { width: 12px; height: 12px; border-radius: 50%; background: var(--good); box-shadow: 0 0 14px var(--good); flex-shrink: 0; }
+  .ok { width: 12px; height: 12px; border-radius: 50%; background: var(--good); flex-shrink: 0; }
   .commits { display: flex; flex-direction: column; border-radius: 16px; border: 1px solid var(--border); background: var(--glass, var(--surface)); overflow: hidden; }
   .commit { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--border); background: none; text-align: left; }
   .commit:last-child { border-bottom: 0; }

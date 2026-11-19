@@ -74,11 +74,11 @@
   .sev-critical { --c: var(--sev-critical); } .sev-high { --c: var(--sev-high); } .sev-medium { --c: var(--sev-medium); }
   .sev-low, .sev-info { --c: var(--sev-low); }
   .head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; background: none; text-align: left; }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); box-shadow: 0 0 10px var(--c); flex-shrink: 0; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
   .title { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .open .title { white-space: normal; }
   .meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; font-size: 11.5px; color: var(--text-3); }
-  .ai { padding: 1px 7px; border-radius: 99px; font-weight: 600; color: #fff; background: linear-gradient(135deg, #7c5cff, #38bdf8); }
+  .ai { padding: 1px 7px; border-radius: 99px; font-weight: 600; color: #fff; background: var(--accent); }
   .chk { padding: 1px 7px; border-radius: 99px; color: var(--text-2); background: var(--surface-3); }
   .where { color: var(--text-2); }
   .body { padding: 0 16px 14px 35px; }
@@ -91,7 +91,7 @@
   .judge { margin-left: auto; display: flex; gap: 4px; }
   .btn { height: 30px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--surface-2); font-size: 12.5px; }
   .btn:hover { background: var(--surface-3); }
-  .btn.primary { border: 0; color: #fff; background: linear-gradient(135deg, #7c5cff, #4f7cff); box-shadow: 0 4px 16px rgba(124, 92, 255, 0.35); }
+  .btn.primary { border: 0; color: #fff; background: var(--accent); }
   .btn.ghost { background: none; border-color: transparent; color: var(--text-3); }
   .btn.ghost.on { color: var(--text); border-color: var(--border-strong); }
 </style>

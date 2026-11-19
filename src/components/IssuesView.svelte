@@ -70,7 +70,7 @@
     background: none; font-size: 12.5px; color: var(--text-2); transition: all 0.15s; }
   .fchip:hover { color: var(--text); border-color: var(--border-strong); }
   .fchip.on { color: var(--text); background: var(--surface-3); border-color: var(--border-strong); }
-  .fchip.ai.on { color: #fff; border-color: transparent; background: linear-gradient(135deg, rgba(124, 92, 255, 0.9), rgba(56, 189, 248, 0.8)); }
+  .fchip.ai.on { color: #fff; border-color: transparent; background: var(--accent); }
   .fchip.ai.on i { color: rgba(255, 255, 255, 0.8); }
   .sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
   .lvl .d { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
