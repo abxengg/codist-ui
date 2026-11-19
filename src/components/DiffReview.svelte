@@ -16,7 +16,9 @@
   const d = $derived(app.detail);
   const review = $derived(d?.review ?? null);
   const files = $derived(d?.analysis.files ?? []);
-  const issues = $derived(app.issues);
+  // Issues this commit introduced, then ones an earlier commit introduced that are still on these lines. Both show (the card
+  // says "since abc1234"), so the count on the commit list and the issues here always agree.
+  const issues = $derived([...app.issues, ...app.carried]);
   const done = $derived(review?.files.filter((f) => !f.pending).length ?? 0);
   const running = $derived(review?.status === 'running' || review?.status === 'queued');
   // Only a rough guide: recent files on this machine, times the files still waiting for the model.

@@ -27,6 +27,7 @@
     close();
     void selectCommit(i.firstSeen && i.firstSeen !== 'baseline' && i.firstSeen !== 'working' ? i.firstSeen : i.lastSeen, true);
     app.mode = 'commits';
+    app.commitStage = true;
   }
   async function act(what: 'fixed' | 'reopen') { if (g) { await issueAction(g, what); close(); } }
   function fix() { if (g && i) { proposeFix(asFinding(i), i.lastSeen, others(g), g); close(); } }

@@ -146,6 +146,8 @@ class AppState {
 
   follow = $state(true);
   focusChanges = $state(false);
+  /** The chosen commit is open on its floating stage over the Commits page. */
+  commitStage = $state(false);
   drawer = $state(false); // the details panel, opened over a page that has none of its own
   groupBy = $state<'none' | 'package' | 'service'>(prefStr('groupBy', ['none', 'package', 'service'] as const, 'none'));
   showTests = $state(false);

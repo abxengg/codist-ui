@@ -23,6 +23,7 @@
   function openCommit(sha: string) {
     void selectCommit(sha, true);
     app.mode = 'commits';
+    app.commitStage = true;
   }
   const greet = $derived(new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening');
 </script>
