@@ -83,7 +83,7 @@
       <h2>How it connects</h2>
       <div class="cmap" bind:this={cmap}>
         <Wires root={cmap} links={[
-          ...r.calls.map((c) => ({ from: 'svc:' + c.from, to: 'svc:' + c.to, busy: true, tone: '242,123,182', label: c.routes.length ? `${c.routes.length} route${c.routes.length === 1 ? '' : 's'}` : 'HTTP' })),
+          ...r.calls.map((c) => ({ from: 'svc:' + c.from, to: 'svc:' + c.to, busy: false, tone: '242,123,182', label: c.routes.length ? `${c.routes.length} route${c.routes.length === 1 ? '' : 's'}` : 'HTTP' })),
           ...r.services.flatMap((sv) => (sv.usesLibs ?? []).map((l) => ({ from: 'svc:' + sv.name, to: 'svc:' + l, tone: '150,150,170' }))),
         ].filter((l, i, all) => all.findIndex((x) => x.from === l.from && x.to === l.to) === i)} />
         <div class="crow">

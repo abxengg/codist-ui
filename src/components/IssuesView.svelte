@@ -135,8 +135,8 @@
   .wf { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--glass); font: 11.5px var(--font); color: var(--text-2); box-shadow: var(--elev-1); }
   .wf i { font-style: normal; font-weight: 600; color: var(--sev-high); } .wf.on { border-color: var(--accent); color: var(--text); }
   .board { display: grid; grid-template-columns: repeat(var(--n), minmax(240px, 1fr)); gap: 16px; align-items: start; }
-  .col { --c: var(--sev-medium); border-radius: 18px; background: var(--glass); border: 1px solid var(--border); box-shadow: var(--elev-2), 0 0 50px -24px color-mix(in srgb, var(--c) 55%, transparent);
-    padding: 12px; animation: drift 11s ease-in-out infinite; }
+  .col { --c: var(--sev-medium); border-radius: 16px; background: var(--glass); border: 1px solid var(--border); box-shadow: var(--elev-1);
+    padding: 12px; }
   .col.critical { --c: var(--sev-critical); } .col.high { --c: var(--sev-high); } .col.low { --c: var(--sev-low); }
   @keyframes drift { 50% { transform: translateY(-5px); } }
   .col header { display: flex; align-items: center; gap: 8px; padding: 2px 4px 10px; }

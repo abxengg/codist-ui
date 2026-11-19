@@ -409,6 +409,7 @@
       // Dots, far first.
       const draw = f.three ? [...nodes].sort((a, b) => b.pz - a.pz) : nodes;
       const reading = live.call?.status === 'running' && live.call.path ? byFile.get(live.call.path) ?? null : null;
+      const halo = nodes.length <= 1500;
       for (const n of draw) {
         const on = n === litNode, nb = near.has(n);
         const fade = (reach ? (reach.has(n) || n === picked ? 1 : 0.12) : litNode && !on && !nb ? 1 - 0.8 * lit : 1) * depthA(n) * dim(n);
@@ -416,6 +417,8 @@
         ctx.globalAlpha = fade;
         const col = on || (reach && reach.has(n)) ? accent : colourOf(n);
         // A soft light around what matters: a class with open issues, or the one in focus.
+        // A faint halo of the dot's own colour: the graph gives off a little light (dark theme; cheap, no blur).
+        if (dark && halo && fade > 0.3) { ctx.globalAlpha = fade * 0.14; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(n.px, n.py, r * 2.3, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = fade; }
         const glow = on || n === picked ? accent : n.issues ? SEV_COL[n.worst] ?? SEV_COL.medium : '';
         if (glow && fade > 0.3) { ctx.shadowColor = glow; ctx.shadowBlur = Math.min(28, 10 + r); }
         shape(n.g.kind, n.px, n.py, r, col);
@@ -662,7 +665,8 @@
 <style>
   .map { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--map-bg, var(--canvas)); }
   /* A faint light in the middle of the graph, as if it lit the room. */
-  :global(:root:not([data-theme='light'])) .map::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(55% 55% at 50% 50%, rgba(124, 100, 255, 0.07), transparent 70%); }
+  :global(:root:not([data-theme='light'])) .map::before { content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(50% 50% at 50% 50%, rgba(124, 100, 255, 0.13), transparent 72%), radial-gradient(30% 35% at 62% 40%, rgba(90, 150, 255, 0.05), transparent 70%); }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
   .hud { position: absolute; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .tl { top: 14px; left: 14px; flex-direction: column; align-items: flex-start; }

@@ -186,7 +186,7 @@
 </section>
 
 <style>
-  .review { min-width: 0; min-height: 0; overflow: auto; padding: 18px 20px 64px; background: var(--bg); display: flex; flex-direction: column; gap: 14px; }
+  .review { min-width: 0; min-height: 0; overflow: auto; padding: 18px 20px 64px; background: transparent; display: flex; flex-direction: column; gap: 14px; }
   header { display: grid; gap: 4px; max-width: 820px; }
   h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.012em; line-height: 1.3; text-wrap: balance; }
   .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; color: var(--text-2); font-size: 12.5px; }
@@ -194,7 +194,7 @@
   .state .faint { margin-left: 6px; }
   .good { color: var(--good); font-weight: 500; }
   .bad { color: var(--bad); }
-  .file { flex-shrink: 0; container-type: inline-size; border-radius: var(--r-lg); background: var(--surface); box-shadow: 0 0 0 1px var(--border); overflow: clip; }
+  .file { flex-shrink: 0; container-type: inline-size; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--elev-1); overflow: clip; }
   .head { position: sticky; top: -18px; z-index: 2; display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 8px 0 4px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
   .toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 6px; border: 0; background: none; text-align: left; }
   .chev { flex-shrink: 0; color: var(--text-3); transition: transform var(--t-open) var(--t-ease); }
@@ -211,14 +211,14 @@
   .row.add .no { background: color-mix(in srgb, var(--added) 10%, transparent); }
   .row.del { background: color-mix(in srgb, var(--bad) 11%, transparent); }
   .row.del .no { background: color-mix(in srgb, var(--bad) 9%, transparent); }
-  .row.hunk { color: var(--accent-text); background: var(--accent-soft); }
+  .row.hunk { color: var(--text-3); background: var(--surface-2); }
   /* The issue sits directly under its line, tied to it by a stripe in the colour of its severity. */
-  .note { position: sticky; left: 0; width: min(calc(100cqw - 104px), 860px); margin: 2px 0 6px 88px; font-family: var(--font); border-left: 3px solid var(--note, var(--border-strong)); border-radius: 0 var(--r) var(--r) 0; background: var(--surface); box-shadow: 0 0 0 1px var(--border); scroll-margin: 60px; }
+  .note { position: sticky; left: 0; width: min(calc(100cqw - 104px), 860px); margin: 4px 0 8px 88px; font-family: var(--font); border: 1px solid color-mix(in srgb, var(--note, var(--border-strong)) 45%, var(--border)); border-radius: 12px; background: var(--glass-strong); box-shadow: var(--elev-1); scroll-margin: 60px; }
   .note.critical { --note: var(--sev-critical); }
   .note.high { --note: var(--sev-high); }
   .note.medium { --note: var(--sev-medium); }
   .note.low, .note.info { --note: var(--sev-low); }
-  .note.active { box-shadow: 0 0 0 2px var(--mark); }
+  .note.active { box-shadow: var(--elev-1), 0 0 0 2px color-mix(in srgb, var(--note) 70%, transparent); }
   .file > .note { margin: 8px 12px; width: auto; }
   @media (max-width: 1000px) { .review { padding: 14px 12px 40px; } .note { margin-left: 8px; width: calc(100cqw - 24px); } .row { grid-template-columns: 34px 34px minmax(max-content, 1fr); } }
   @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }

@@ -125,9 +125,9 @@ body {
   --elev-2: inset 0 1px 0 var(--edge), 0 2px 4px rgba(0, 0, 0, 0.5), 0 22px 48px -14px rgba(0, 0, 0, 0.85);
   --accent-edge: #4a33b8;
   --glow: 0 0 28px -6px rgba(139, 116, 255, 0.55);
-  --glow-soft: 0 0 60px -18px rgba(139, 116, 255, 0.45);
+  --glow-soft: 0 0 50px -22px rgba(139, 116, 255, 0.32);
   --rail-bg: rgba(12, 12, 18, 0.9);
-  --map-bg: #111116;
+  --map-bg: var(--bg);
   --surface-3: #282836;
   --border: rgba(255, 255, 255, 0.07);
   --border-strong: rgba(255, 255, 255, 0.14);
@@ -356,3 +356,10 @@ kbd {
 .btn.secondary:active { box-shadow: inset 0 1px 0 var(--edge); }
 .btn.sm { height: 26px; border-radius: 8px; }
 textarea, input[type='text'], input:not([type]) { border-radius: 10px; }
+
+/* The shared language. Every page uses these: one card, one label, one pill. */
+.ui-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+.ui-pill { display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border-radius: 99px; font: 600 10.5px var(--font); white-space: nowrap;
+  color: var(--text-2); background: var(--surface-3); }
+.ui-pill.ai { color: #fff; background: var(--accent); } .ui-pill.good { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.ui-pill.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); }

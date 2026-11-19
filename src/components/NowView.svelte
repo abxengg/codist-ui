@@ -125,9 +125,8 @@
   @media (max-width: 1000px) { .cols { grid-template-columns: 1fr; } }
   .block { margin-bottom: 24px; }
   /* Everything on Now floats: panels and tiles drift gently, each on its own rhythm. */
-  .panel { padding: 16px 16px 14px; border-radius: 18px; background: var(--glass); border: 1px solid var(--border); box-shadow: var(--elev-2), var(--glow-soft); }
+  .panel { padding: 16px 16px 14px; border-radius: 16px; background: var(--glass); border: 1px solid var(--border); box-shadow: var(--elev-1); }
   .panel .commits { box-shadow: none; }
-  .fl { animation: drift 9s ease-in-out infinite; }
   .stats .fl:nth-child(1) { animation-duration: 8s; } .stats .fl:nth-child(2) { animation-duration: 9.5s; animation-delay: -2s; }
   .stats .fl:nth-child(3) { animation-duration: 8.5s; animation-delay: -4s; } .stats .fl:nth-child(4) { animation-duration: 10s; animation-delay: -1s; }
   .stats .fl:nth-child(5) { animation-duration: 9s; animation-delay: -3s; }

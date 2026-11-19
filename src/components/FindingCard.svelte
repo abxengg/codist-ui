@@ -132,20 +132,19 @@
 
 <style>
   .btn.on { border-color: var(--good); color: var(--good); }
-  .finding { border-bottom: 1px solid var(--border); }
   .suggest-wrap { padding: 0 4px 10px; }
   .finding.ignored { opacity: 0.6; }
-  .row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 4px; border: 0; background: none; text-align: left; }
+  .row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 0; background: none; text-align: left; border-radius: 12px; }
   .row:hover { background: var(--hover); }
   .chev { flex-shrink: 0; color: var(--text-3); transition: transform 0.15s var(--ease); }
   .expanded .chev { transform: rotate(90deg); }
-  .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
   .fixed-note { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; color: var(--good); font-size: 12px; }
   .fixed-note b { color: var(--text); font-weight: 500; }
-  .tag.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
-  .tag { font-size: 10.5px; font-weight: 500; padding: 0 6px; border-radius: 4px; color: var(--text-2); border: 1px solid var(--border); white-space: nowrap; }
+  .tag.good { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+  .tag { display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border-radius: 99px; font-size: 10.5px; font-weight: 600; color: var(--text-2); background: var(--surface-3); white-space: nowrap; }
   .where { font-size: 11px; color: var(--text-3); white-space: nowrap; }
-  .body { padding: 0 4px 12px 22px; }
+  .body { padding: 0 14px 14px 30px; }
   p { margin: 0 0 8px; color: var(--text-2); line-height: 1.55; }
   .locs { list-style: none; margin: 0 0 8px; padding: 0; border-left: 2px solid var(--border); }
   .locs button { display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 3px 8px; border: 0; background: none; text-align: left; font-size: 12px; }
@@ -155,12 +154,13 @@
   .root { margin-left: auto; font-size: 10.5px; color: var(--text-2); white-space: nowrap; }
   .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 11.5px; }
   .meta { margin-left: 4px; }
-  .how { margin: 8px 0; padding: 8px 10px; border-left: 2px solid var(--border); background: var(--surface-2); border-radius: var(--r); }
-  .howlabel { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3); }
+  .how { margin: 10px 0; padding: 10px 12px; background: var(--surface-2); border-radius: 10px; }
+  .howlabel { display: block; margin-top: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
   .how ol { margin: 4px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.5; }
   .how li { margin: 2px 0; overflow-wrap: anywhere; }
   .how li .res { color: var(--text-2); }
   .how li.good .res { color: var(--good); }
   .how li.bad .res { color: var(--warn); }
   .what p { margin: 4px 0 10px; font-size: 13px; line-height: 1.55; color: var(--text); }
+  .row :global(.sev) { display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border-radius: 99px; font-size: 10.5px; font-weight: 600; text-transform: capitalize; }
 </style>

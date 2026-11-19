@@ -117,8 +117,8 @@
   .ln.flag { background: color-mix(in srgb, var(--c) 12%, transparent); }
   .no { position: relative; }
   .mk { position: absolute; left: 8px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); }
-  .inline { margin: 4px 16px 8px 56px; padding: 10px 12px; border-radius: 10px; font-family: var(--font); white-space: normal;
-    background: var(--glass-strong); border: 1px solid color-mix(in srgb, var(--c) 45%, var(--border)); box-shadow: var(--elev-1), 0 0 30px -14px color-mix(in srgb, var(--c) 60%, transparent); }
+  .inline { margin: 4px 16px 8px 56px; padding: 10px 12px; border-radius: 12px; font-family: var(--font); white-space: normal;
+    background: var(--glass-strong); border: 1px solid color-mix(in srgb, var(--c) 45%, var(--border)); box-shadow: var(--elev-1); }
   .ih { display: flex; align-items: center; gap: 8px; } .ih b { font-size: 12.5px; font-weight: 600; flex: 1; }
   .ih .ai { padding: 0 7px; border-radius: 99px; font-size: 10.5px; font-weight: 600; color: #fff; background: var(--accent); }
   .ih .chk { padding: 0 7px; border-radius: 99px; font-size: 10.5px; color: var(--text-2); background: var(--surface-3); }
