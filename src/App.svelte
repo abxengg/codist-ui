@@ -29,7 +29,7 @@
   const wanted = location.hash.slice(1);
   app.mode = SCREENS.includes(wanted) ? (wanted as typeof app.mode) : 'now';
   // The new screens fill the window themselves; the classic ones keep their top bar.
-  const NEW = new Set(['now', 'issues', 'commits', 'map', 'graph']);
+  const NEW = new Set(['now', 'issues', 'commits', 'map', 'graph', 'activity', 'repo', 'incidents']);
   $effect(() => {
     document.title = app.status?.repo ? `Codist · ${app.status.repo}` : 'Codist';
   });

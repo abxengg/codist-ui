@@ -181,4 +181,8 @@
     .stage { grid-template-columns: minmax(0, 1fr); overflow: auto; align-content: start; }
     .code, .left, .right { grid-column: 1; grid-row: auto; }
   }
+
+  /* Long words (a full method chain, a path) wrap inside the card instead of running over the code. */
+  .note, .note p, .note li, .wside .note, .ftitle h2, .title h2 { overflow-wrap: anywhere; min-width: 0; }
+  .left, .right { min-width: 0; }
 </style>

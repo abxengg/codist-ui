@@ -101,24 +101,24 @@
 
 <style>
   .incidents { flex: 1; min-height: 0; display: grid; grid-template-columns: 280px minmax(0, 1fr); }
-  .list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--surface); }
-  .head { display: flex; justify-content: space-between; align-items: center; height: 40px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--border); }
-  .title { font-weight: 600; }
-  ul { list-style: none; margin: 0; padding: 4px; overflow: auto; flex: 1; }
-  .item { display: grid; gap: 2px; width: 100%; padding: 8px; border: 0; border-radius: var(--r); background: none; text-align: left; }
-  .item:hover { background: var(--hover); }
-  .item.selected { background: var(--accent-soft); }
+  .list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--glass); box-shadow: 10px 0 30px -20px rgba(0, 0, 0, 0.8); position: relative; z-index: 1; }
+  .head { display: flex; justify-content: space-between; align-items: center; padding: 18px 14px 14px 16px; border-bottom: 1px solid var(--border); }
+  .title { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  ul { list-style: none; margin: 0; padding: 8px; overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .item { display: grid; gap: 3px; width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); text-align: left; box-shadow: var(--elev-1); transition: transform 0.15s, box-shadow 0.15s; }
+  .item:hover { transform: translateY(-1px); box-shadow: var(--elev-2); }
+  .item.selected { border-color: rgba(139, 116, 255, 0.55); box-shadow: var(--elev-2), var(--glow-soft); }
   .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .meta { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-3); }
   .time { margin-left: auto; }
   .cause { font-size: 11.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ok { color: var(--good); }
   .bad { color: var(--bad); }
-  .content { min-width: 0; min-height: 0; overflow: auto; background: var(--bg); }
-  .new { max-width: 820px; margin: 0 auto; padding: 28px 24px 60px; display: grid; gap: 8px; }
-  h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  .content { min-width: 0; min-height: 0; overflow: auto; }
+  .new { max-width: 820px; margin: 36px auto 60px; padding: 24px 26px; display: grid; gap: 8px; border-radius: 18px; background: var(--glass); border: 1px solid var(--border); box-shadow: var(--elev-2), var(--glow-soft); }
+  h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
   .new p { margin: 0 0 10px; max-width: 70ch; line-height: 1.6; }
-  .field, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface); color: var(--text); font: inherit; }
+  .field, textarea { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--code-bg); color: var(--text); font: inherit; }
   textarea { font: 12px/1.5 var(--mono); resize: vertical; min-height: 280px; }
   .field:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .drop { border-radius: var(--r); }

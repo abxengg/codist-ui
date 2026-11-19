@@ -702,7 +702,7 @@ export async function openFile(path: string, sha: string | null, line: number | 
   }
   if (switchTab) {
     app.tab = 'code';
-    if (['now', 'issues', 'commits', 'map'].includes(app.mode)) app.fileShown = true;
+    if (['now', 'issues', 'commits', 'map', 'activity', 'repo', 'incidents'].includes(app.mode)) app.fileShown = true;
     else reveal();
   }
   if (line) app.focusLine = { line, nonce: Math.random() };

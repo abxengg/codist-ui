@@ -243,8 +243,8 @@
 <style>
   .detail { max-width: 1080px; margin: 0 auto; padding: 22px 24px 72px; display: grid; gap: 22px; }
   .eyebrow { font-size: 11.5px; color: var(--text-3); }
-  h1 { margin: 4px 0 8px; font-size: 20px; font-weight: 600; }
-  h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+  h1 { margin: 4px 0 8px; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+  h2 { margin: 0 0 10px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
   h3 { margin: 0; font-size: 15px; font-weight: 600; flex: 1; min-width: 0; }
   .status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-2); }
   .spacer { flex: 1; }
@@ -253,9 +253,9 @@
   .pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
   .warn { margin: 8px 0 0; color: var(--warn); font-size: 12.5px; }
 
-  .cause { padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); display: grid; gap: 8px; }
+  .cause { padding: 16px 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--glass); box-shadow: var(--elev-1); display: grid; gap: 8px; }
   .cause + .cause { margin-top: 10px; }
-  .cause.confirmed { border-color: color-mix(in srgb, var(--good) 55%, transparent); box-shadow: inset 3px 0 0 var(--good); }
+  .cause.confirmed { border-color: color-mix(in srgb, var(--good) 55%, transparent); box-shadow: var(--elev-1), 0 0 40px -16px color-mix(in srgb, var(--good) 55%, transparent); }
   .cause-head { display: flex; align-items: center; gap: 10px; }
   .cause p { margin: 0; color: var(--text-2); line-height: 1.6; }
   .conf { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 4px; white-space: nowrap; }

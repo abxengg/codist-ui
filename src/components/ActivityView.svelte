@@ -1,5 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { fade, fly, scale } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
+  import Orb from './Orb.svelte';
+  import { tokenize, plain, type Line } from '../lib/highlight';
   import { app, openFile, openIncident, showCommit } from '../lib/store.svelte';
   import { api } from '../lib/api';
   import CopyButton from './CopyButton.svelte';
@@ -91,182 +95,230 @@
   function goCommit(sha: string) { void showCommit(sha); }
   function goFile(p: string) { void openFile(p, null); }
   function goIncident(id: string) { app.mode = 'incidents'; void openIncident(id); }
+
+  // The picked call opens in focus; Esc or a click outside closes it.
+  const close = () => { picked = null; pickedId = null; };
+  let showLog = $state(false);
+  let filter = $state<'all' | 'ai' | 'running' | 'failed'>('all');
+  $effect(() => { aiOnly = filter === 'ai'; status = filter === 'running' ? 'running' : filter === 'failed' ? 'failed' : ''; });
+  let respTok = $state<Line[]>([]);
+  $effect(() => { const t = pretty, th = app.theme; respTok = plain(t); void tokenize(t, t.trim().startsWith('{') ? 'json' : null, th).then((x) => { if (t === pretty) respTok = x; }); });
+  let openSec = $state<Record<number, boolean>>({});
+  $effect(() => { void picked?.id; openSec = {}; });
+  const ease = { easing: cubicOut };
 </script>
 
-<div class="wrap">
-  <aside>
-    <div class="top">
-      <h1>Activity</h1>
-      <p class="faint small">{totals.calls} model calls · {totals.tokens.toLocaleString()} tokens · {secs(totals.ms)} of model time</p>
-      <input bind:value={query} placeholder="Search title, file, commit…" spellcheck="false" />
-      <div class="row">
-        <select bind:value={kind} aria-label="Kind"><option value="">All kinds</option>{#each kinds as k}<option value={k}>{k}</option>{/each}</select>
-        <select bind:value={status} aria-label="Status"><option value="">Any status</option><option value="running">Running</option><option value="done">Done</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option></select>
-      </div>
-      <label class="small"><input type="checkbox" bind:checked={aiOnly} /> Model calls only</label>
-    </div>
-    <ul>
-      {#each shown as a (a.id)}
-        <li>
-          <button class="item" class:on={a.id === pickedId} onclick={() => pick(a.id)}>
-            <span class="dot {a.status}" class:spin={a.status === 'running'}></span>
-            <span class="t">{a.title}</span>
-            <span class="meta"><span class="kind">{a.kind}</span>{#if a.sha}<span class="mono">{a.sha.slice(0, 7)}</span>{/if}{#if a.tookMs}<span>{secs(a.tookMs)}</span>{/if}<span class="time">{ago(a.at)}</span></span>
-            {#if a.note}<span class="note">{a.note}</span>{/if}
-          </button>
-        </li>
-      {:else}<li class="empty">{failed || 'Nothing yet. Reviews, fixes and questions show up here as they happen.'}</li>{/each}
-    </ul>
-  </aside>
+<svelte:window onkeydown={(e) => e.key === 'Escape' && picked && close()} />
 
-  <div class="right">
+<div class="apage">
+  <header class="head">
+    <div>
+      <h1>Activity</h1>
+      <p>{totals.calls} AI calls · {totals.tokens.toLocaleString()} tokens · {secs(totals.ms)} of model time</p>
+    </div>
+    <input class="search" bind:value={query} placeholder="Search title, file, commit…" spellcheck="false" />
+  </header>
+
   <section class="lanes" aria-label="Work lanes">
     {#each lanes as l (l.name)}
-      <div class="lane">
-        <div class="lh"><b>{l.name}</b><span class="faint">{l.count ? `${l.count} waiting` : 'nothing waiting'}</span></div>
-        {#if l.running}
-          <button class="run" onclick={() => goCommit(l.running!)} title={msgOf(l.running)}>
-            <span class="dot running spin"></span><span class="mono">{l.running.slice(0, 7)}</span><span class="t">{msgOf(l.running) || 'working'}</span><span class="faint">{since(l.since)}</span>
-          </button>
-        {:else}<div class="idle faint">Idle</div>{/if}
-        {#if l.waiting.length}
-          <div class="q"><span class="faint">Next</span>{#each l.waiting.slice(0, 4) as w (w)}<button class="chip mono" title={msgOf(w)} onclick={() => goCommit(w)}>{w.slice(0, 7)}</button>{/each}{#if l.count > 4}<span class="faint">+{l.count - 4}</span>{/if}</div>
-        {/if}
-        {#if l.finished.length}
-          <div class="q"><span class="faint">Done</span>{#each l.finished.slice(0, 3) as f (f.sha + f.at)}<button class="chip mono" title={msgOf(f.sha)} onclick={() => goCommit(f.sha)}>{f.sha.slice(0, 7)} · {secs(f.tookMs)}</button>{/each}</div>
-        {/if}
+      <div class="lane" class:busy={!!l.running}>
+        <div class="lh">
+          {#if l.running}<Orb mood="reading" size={34} label="{l.name} working" />{:else}<span class="idle-dot"></span>{/if}
+          <div><b>{l.name}</b><span>{l.running ? `working · ${since(l.since)}` : l.count ? `${l.count} waiting` : 'Idle'}</span></div>
+        </div>
+        {#if l.running}<button class="run" onclick={() => goCommit(l.running!)} title={msgOf(l.running)}><span class="mono">{l.running.slice(0, 7)}</span> {msgOf(l.running) || 'working'}</button>{/if}
+        {#if l.waiting.length}<div class="q"><span>Next</span>{#each l.waiting.slice(0, 4) as w (w)}<button class="pill mono" title={msgOf(w)} onclick={() => goCommit(w)}>{w.slice(0, 7)}</button>{/each}{#if l.count > 4}<span>+{l.count - 4}</span>{/if}</div>{/if}
+        {#if l.finished.length}<div class="q"><span>Done</span>{#each l.finished.slice(0, 3) as f (f.sha + f.at)}<button class="pill mono" title={msgOf(f.sha)} onclick={() => goCommit(f.sha)}>{f.sha.slice(0, 7)} · {secs(f.tookMs)}</button>{/each}</div>{/if}
       </div>
-    {:else}<div class="faint small">Loading lanes…</div>{/each}
+    {:else}<p class="empty">Loading lanes…</p>{/each}
   </section>
-  <main>
-    {#if !picked}
-      <div class="empty">Pick an entry to see exactly what was sent to the model and what it answered.</div>
-    {:else}
-      <header>
-        <div class="title"><span class="dot {picked.status}"></span><h2>{picked.title}</h2></div>
-        <div class="facts">
-          <span class="kind">{picked.kind}</span><span>{picked.status}</span>
-          {#if picked.model}<span class="mono">{picked.model}</span>{/if}
-          {#if picked.tookMs}<span>{secs(picked.tookMs)}</span>{/if}
-          {#if picked.promptTokens}<span>{picked.promptTokens} tokens in, {picked.replyTokens} out</span>{/if}
-          <span class="faint">{new Date(picked.at).toLocaleString()}</span>
-        </div>
-        {#if picked.sha || picked.path || picked.incident || picked.knowledge?.length}
-          <div class="rel">
-            <span class="label">Related</span>
-            {#if picked.sha}<button class="lnk mono" onclick={() => goCommit(picked!.sha!)}>commit {picked.sha.slice(0, 7)}</button>{/if}
-            {#if picked.path}<button class="lnk mono" onclick={() => goFile(picked!.path!)}>{picked.path.slice(picked.path.lastIndexOf('/') + 1)}</button>{/if}
-            {#if picked.incident}<button class="lnk" onclick={() => goIncident(picked!.incident!)}>incident</button>{/if}
-            {#each picked.knowledge ?? [] as k}<span class="kn mono" title="Knowledge entry retrieved for this prompt">{k}</span>{/each}
-          </div>
-        {/if}
-        {#if picked.note}<p class="muted">{picked.note}</p>{/if}
-        {#if picked.error}<p class="err">{picked.error} <CopyButton text={picked.error} title="Copy the error" /></p>{/if}
-      </header>
-      {#if picked.kind !== 'step'}
-        <div class="tabsrow"><div class="seg" role="tablist">
-          <button class:on={view === 'prompt'} onclick={() => (view = 'prompt')}>Fed to the AI · {sections.length} sections</button>
-          <button class:on={view === 'system'} onclick={() => (view = 'system')}>Instructions</button>
-          <button class:on={view === 'response'} onclick={() => (view = 'response')}>Response</button>
-        </div><CopyButton text={picked.user ?? ''} label="Copy prompt" /></div>
-        <div class="content">
-          {#if view === 'prompt'}
-            {#each sections as s, i}
-              <details open={i < 4}><summary>{s.title} <span class="faint">{s.body.length.toLocaleString()} chars</span> <CopyButton text={s.body} title="Copy this section" /></summary><pre>{s.body}</pre></details>
-            {/each}
-          {:else if view === 'system'}
-            <div class="cp"><CopyButton text={picked.system ?? ''} label="Copy instructions" /></div>
-            <pre>{picked.system}</pre>
-          {:else if picked.status === 'running'}
-            <div class="empty"><span class="spinner"></span> The model is working…</div>
-          {:else}
-            <div class="cp"><CopyButton text={pretty} label="Copy response" /></div>
-            <pre>{pretty || '(no response)'}</pre>
-          {/if}
-        </div>
-      {:else}
-        <p class="faint">This step ran without the model, so there is no prompt.</p>
-      {/if}
+
+  <div class="chips">
+    {#each [['all', 'Everything'], ['ai', 'AI calls'], ['running', 'Running'], ['failed', 'Failed']] as [v, l]}
+      <button class="fchip" class:on={filter === v} onclick={() => (filter = v as typeof filter)}>{l}</button>
+    {/each}
+    {#if kinds.length > 1}
+      <select class="kind" bind:value={kind} aria-label="Kind"><option value="">All kinds</option>{#each kinds as k}<option value={k}>{k}</option>{/each}</select>
     {/if}
-  </main>
-  <section class="log" aria-label="Live log">
-    <div class="loghead">
-      <b>Live log</b>
-      <select bind:value={level} aria-label="Lowest level shown"><option value="debug">Debug and up</option><option value="info">Info and up</option><option value="warn">Warnings and errors</option><option value="error">Errors only</option></select>
-      <label class="small"><input type="checkbox" bind:checked={follow} /> Follow</label>
-      <span class="faint small">{shownLogs.length} lines</span>
-      <span class="cp2"><CopyButton text={shownLogs.map((e) => `${clock(e.at)} ${e.level.toUpperCase()} ${e.msg} ${attrsText(e)}`).join('\n')} label="Copy" /></span>
-    </div>
-    <div class="lines" bind:this={logEl}>
-      {#each shownLogs as e (e.seq)}
-        <div class="ll {e.level}"><span class="tm mono">{clock(e.at)}</span><span class="lv">{e.level}</span><span class="m">{e.msg}</span><span class="at mono">{attrsText(e)}</span></div>
-      {:else}<div class="faint small">No log lines yet.</div>{/each}
-    </div>
-  </section>
   </div>
+
+  <div class="list">
+    {#each shown as a (a.id)}
+      <button class="row {a.status}" onclick={() => pick(a.id)}>
+        <span class="dot"></span>
+        <span class="t">{a.title}</span>
+        <span class="meta">
+          <span class="kindtag">{a.kind}</span>
+          {#if a.path}<span class="mono">{a.path.slice(a.path.lastIndexOf('/') + 1)}</span>{/if}
+          {#if a.sha}<span class="mono">{a.sha.slice(0, 7)}</span>{/if}
+          {#if a.promptTokens}<span>{((a.promptTokens ?? 0) + (a.replyTokens ?? 0)).toLocaleString()} tok</span>{/if}
+          {#if a.tookMs}<span>{secs(a.tookMs)}</span>{/if}
+          <span>{ago(a.at)}</span>
+        </span>
+      </button>
+    {:else}<p class="empty">{failed || 'Nothing yet. Reviews, fixes and questions show up here as they happen.'}</p>{/each}
+  </div>
+
+  <section class="log" class:open={showLog}>
+    <button class="loghead" onclick={() => (showLog = !showLog)} aria-expanded={showLog}>
+      <b>Live log</b><span>{shownLogs.length} lines</span>
+      <span class="last mono">{shownLogs.at(-1) ? `${clock(shownLogs.at(-1)!.at)} ${shownLogs.at(-1)!.msg}` : ''}</span>
+      <span class="chev">{showLog ? '▾' : '▸'}</span>
+    </button>
+    {#if showLog}
+      <div class="logtools">
+        <select bind:value={level} aria-label="Lowest level shown"><option value="debug">Debug and up</option><option value="info">Info and up</option><option value="warn">Warnings and errors</option><option value="error">Errors only</option></select>
+        <label><input type="checkbox" bind:checked={follow} /> Follow</label>
+        <CopyButton text={shownLogs.map((e) => `${clock(e.at)} ${e.level.toUpperCase()} ${e.msg} ${attrsText(e)}`).join('\n')} label="Copy" />
+      </div>
+      <div class="lines" bind:this={logEl}>
+        {#each shownLogs as e (e.seq)}
+          <div class="ll {e.level}"><span class="tm mono">{clock(e.at)}</span><span class="lv">{e.level}</span><span class="m">{e.msg}</span><span class="at mono">{attrsText(e)}</span></div>
+        {:else}<div class="empty">No log lines yet.</div>{/each}
+      </div>
+    {/if}
+  </section>
 </div>
 
+{#if picked}
+  {@const p = picked}
+  <div class="scrim" transition:fade={{ duration: 240, ...ease }} onclick={close} role="presentation"></div>
+  <div class="stage" role="dialog" aria-modal="true" aria-label={p.title}>
+    <header class="ftitle" transition:fly={{ y: -16, duration: 300, ...ease }}>
+      <span class="st {p.status}">{p.status}</span><span class="k">{p.kind}</span>
+      <h2>{p.title}</h2>
+      <button class="x" aria-label="Close" onclick={close}>×</button>
+    </header>
+    <section class="center" transition:scale={{ start: 0.95, opacity: 0, duration: 300, ...ease }}>
+      {#if p.kind === 'step'}
+        <p class="empty">This step ran without the AI, so there is no prompt or answer.</p>
+      {:else if p.status === 'running'}
+        <div class="working"><Orb mood="writing" size={110} label="Working" /><p>The AI is still writing…</p></div>
+      {:else}
+        <div class="ch"><h3>What the AI answered</h3><CopyButton text={pretty} label="Copy" /></div>
+        <div class="code mono">{#each respTok as line, i (i)}<div class="cl">{#each line as t}<span style:color={t.color}>{t.content}</span>{/each}{' '}</div>{/each}</div>
+      {/if}
+    </section>
+    <aside class="left" in:fly={{ x: -28, duration: 340, delay: 100, ...ease }} out:fly={{ x: -20, duration: 200 }}>
+      <div class="note">
+        <div class="ch"><h3>What it was given · {sections.length} parts</h3><CopyButton text={p.user ?? ''} title="Copy the whole prompt" /></div>
+        <ul class="secs">
+          {#each sections as sec, i}
+            <li>
+              <button onclick={() => (openSec = { ...openSec, [i]: !openSec[i] })}><span>{openSec[i] ? '▾' : '▸'} {sec.title}</span><small>{sec.body.length.toLocaleString()} chars</small></button>
+              {#if openSec[i]}<pre>{sec.body}</pre>{/if}
+            </li>
+          {/each}
+          {#if p.system}<li><button onclick={() => (openSec = { ...openSec, [-1]: !openSec[-1] })}><span>{openSec[-1] ? '▾' : '▸'} Standing instructions</span><small>{p.system.length.toLocaleString()} chars</small></button>{#if openSec[-1]}<pre>{p.system}</pre>{/if}</li>{/if}
+        </ul>
+      </div>
+    </aside>
+    <aside class="right" in:fly={{ x: 28, duration: 340, delay: 140, ...ease }} out:fly={{ x: 20, duration: 200 }}>
+      <div class="note">
+        <h3>The call</h3>
+        <dl>
+          {#if p.model}<dt>Model</dt><dd class="mono">{p.model}</dd>{/if}
+          {#if p.tookMs}<dt>Took</dt><dd>{secs(p.tookMs)}</dd>{/if}
+          {#if p.promptTokens}<dt>Tokens</dt><dd>{p.promptTokens} in · {p.replyTokens} out</dd>{/if}
+          <dt>When</dt><dd>{new Date(p.at).toLocaleString()}</dd>
+        </dl>
+      </div>
+      {#if p.sha || p.path || p.incident || p.knowledge?.length}
+        <div class="note">
+          <h3>About</h3>
+          <div class="links">
+            {#if p.sha}<button class="b3" onclick={() => { close(); goCommit(p.sha!); }}>Commit {p.sha.slice(0, 7)}</button>{/if}
+            {#if p.path}<button class="b3" onclick={() => goFile(p.path!)}>{p.path.slice(p.path.lastIndexOf('/') + 1)}</button>{/if}
+            {#if p.incident}<button class="b3" onclick={() => { close(); goIncident(p.incident!); }}>The incident</button>{/if}
+          </div>
+          {#each p.knowledge ?? [] as k}<span class="kn mono">{k}</span>{/each}
+        </div>
+      {/if}
+      {#if p.note}<div class="note"><h3>Note</h3><p>{p.note}</p></div>{/if}
+      {#if p.error}<div class="note err"><h3>Error</h3><p>{p.error}</p><CopyButton text={p.error} title="Copy the error" /></div>{/if}
+    </aside>
+  </div>
+{/if}
+
 <style>
-  .wrap { flex: 1; min-height: 0; display: grid; grid-template-columns: 370px minmax(0, 1fr); background: var(--bg); }
-  aside { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--surface); }
-  .top { display: grid; gap: 7px; padding: 12px; border-bottom: 1px solid var(--border); }
-  h1 { margin: 0; font-size: 16px; font-weight: 600; }
-  .small { font-size: 11.5px; margin: 0; }
-  input:not([type]), select { min-width: 0; height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2); color: var(--text); font: inherit; font-size: 12px; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  ul { list-style: none; margin: 0; padding: 4px; overflow: auto; flex: 1; }
-  .item { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 2px 7px; width: 100%; padding: 7px 8px; border: 0; border-radius: var(--r); background: none; text-align: left; }
-  .item:hover { background: var(--hover); }
-  .item.on { background: var(--accent-soft); }
-  .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
-  .meta { grid-column: 2; display: flex; gap: 8px; font-size: 11px; color: var(--text-3); align-items: center; }
-  .note { grid-column: 2; font-size: 11px; color: var(--text-2); }
-  .time { margin-left: auto; white-space: nowrap; }
-  .kind { font: 600 10px var(--font); padding: 0 5px; line-height: 15px; border-radius: 4px; background: var(--surface-3); color: var(--text-2); }
-  .dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--good); display: inline-block; flex-shrink: 0; }
-  .dot.failed { background: var(--bad); } .dot.cancelled { background: var(--text-3); } .dot.running { background: none; border: 1.5px solid var(--accent); border-right-color: transparent; }
-  .dot.spin { animation: spin 0.8s linear infinite; }
-  .right { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) 260px; }
-  main { min-height: 0; min-width: 0; overflow: auto; padding: 16px 20px 24px; display: flex; flex-direction: column; gap: 10px; }
-  .lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
-  .lane { display: grid; gap: 6px; align-content: start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-2); font-size: 12px; }
-  .lh { display: flex; justify-content: space-between; gap: 8px; }
-  .run { display: grid; grid-template-columns: 10px auto minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 5px 7px; border: 0; border-radius: var(--r); background: var(--accent-soft); text-align: left; font-size: 12px; }
-  .run .dot { margin-top: 0; }
-  .run .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .idle { padding: 5px 0; }
-  .q { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-  .chip { height: 20px; padding: 0 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); font-size: 10.5px; color: var(--text-2); }
-  .chip:hover { border-color: var(--border-strong); color: var(--text); }
-  .log { display: flex; flex-direction: column; min-height: 0; border-top: 1px solid var(--border); background: var(--code-bg); }
-  .loghead { display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-bottom: 1px solid var(--border); font-size: 12px; }
-  .loghead select { height: 24px; }
-  .cp2 { margin-left: auto; }
-  .lines { flex: 1; min-height: 0; overflow: auto; padding: 4px 0; font: 11.5px/1.55 var(--mono); }
-  .ll { display: grid; grid-template-columns: 64px 48px auto minmax(0, 1fr); gap: 10px; padding: 0 12px; white-space: nowrap; }
-  .ll:hover { background: var(--hover); }
-  .ll .m { color: var(--text); }
-  .ll .at { overflow: hidden; text-overflow: ellipsis; color: var(--text-3); }
-  .ll .tm { color: var(--text-3); }
-  .ll .lv { text-transform: uppercase; font-size: 10px; color: var(--text-3); }
-  .ll.warn .lv, .ll.warn .m { color: var(--warn); }
-  .ll.error .lv, .ll.error .m { color: var(--bad); }
-  .ll.debug .m { color: var(--text-2); }
-  .title { display: flex; align-items: center; gap: 8px; }
-  h2 { margin: 0; font-size: 15px; font-weight: 600; }
-  .facts { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 5px; font-size: 12px; color: var(--text-2); align-items: center; }
-  .rel { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; align-items: center; font-size: 12px; }
-  .kn { font-size: 10.5px; padding: 0 6px; line-height: 16px; border-radius: 8px; color: var(--accent-text); background: var(--accent-soft); }
-  .err { margin: 6px 0 0; color: var(--bad); }
-  header p { margin: 6px 0 0; }
-  .seg { display: flex; align-self: flex-start; padding: 2px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-2); }
-  .seg button { height: 26px; padding: 0 10px; border: 0; border-radius: var(--r); background: none; font-size: 12px; color: var(--text-3); }
-  .seg button.on { color: var(--text); background: var(--surface-3); box-shadow: var(--raised); }
-  .tabsrow { display: flex; align-items: center; gap: 8px; }
-  .cp { justify-self: start; }
-  .content { display: grid; gap: 6px; min-width: 0; }
-  details { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); min-width: 0; }
-  summary { padding: 7px 10px; cursor: pointer; font-size: 12.5px; font-weight: 500; }
-  pre { margin: 0; padding: 10px 12px; font: 11.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--code-bg); border-radius: var(--r); }
-  @media (max-width: 900px) { .wrap { grid-template-columns: 1fr; } }
+  .apage { flex: 1; min-height: 0; overflow: auto; padding: 28px clamp(16px, 4vw, 56px) 40px; max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+  .head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 18px; }
+  .head h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
+  .head p { margin: 4px 0 0; color: var(--text-3); font-size: 12.5px; }
+  .search { margin-left: auto; width: 300px; max-width: 45vw; height: 34px; padding: 0 14px; border-radius: 11px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; box-shadow: var(--elev-1); }
+  .search:focus { outline: none; border-color: var(--accent); }
+  .lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .lane { padding: 14px 16px; border-radius: 14px; background: var(--glass); border: 1px solid var(--border); box-shadow: var(--elev-1); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .lane.busy { border-color: rgba(139, 124, 246, 0.45); box-shadow: var(--elev-1), var(--glow-soft); }
+  .lh { display: flex; align-items: center; gap: 12px; }
+  .lh div { display: flex; flex-direction: column; } .lh b { font-size: 13.5px; } .lh span { font-size: 12px; color: var(--text-3); }
+  .idle-dot { width: 10px; height: 10px; margin: 0 12px; border-radius: 50%; background: var(--surface-3); }
+  .run { border: 0; background: none; padding: 0; text-align: left; font-size: 12.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .q { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 11.5px; color: var(--text-3); }
+  .pill { border: 1px solid var(--border); background: var(--surface-2); border-radius: 99px; padding: 1px 8px; font-size: 11px; color: var(--text-2); }
+  .chips { display: flex; gap: 6px; align-items: center; margin: 0 0 12px; flex-wrap: wrap; }
+  .fchip { height: 30px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--border); background: none; font: 12.5px var(--font); color: var(--text-2); }
+  .fchip.on { color: var(--text); background: var(--surface-3); border-color: var(--border-strong); box-shadow: inset 0 1px 0 var(--edge), 0 2px 0 rgba(0, 0, 0, 0.4); }
+  .kind { height: 30px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); padding: 0 10px; font: 12.5px var(--font); }
+  .list { display: flex; flex-direction: column; gap: 6px; }
+  .row { --c: var(--good); display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--glass); box-shadow: var(--elev-1); text-align: left; transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s; }
+  .row:hover { transform: translateY(-1px); border-color: var(--border-strong); box-shadow: var(--elev-2); }
+  .row.running { --c: var(--accent); } .row.failed { --c: var(--bad); } .row.cancelled { --c: var(--text-3); }
+  .row .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); flex-shrink: 0; }
+  .row.running .dot { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  .row .meta { display: flex; gap: 10px; flex-shrink: 0; font-size: 11.5px; color: var(--text-3); }
+  .kindtag { padding: 0 7px; border-radius: 99px; background: var(--surface-3); color: var(--text-2); }
+  .empty { color: var(--text-3); padding: 20px 0; text-align: center; }
+  .log { margin-top: 22px; border-radius: 14px; background: var(--glass); border: 1px solid var(--border); box-shadow: var(--elev-1); overflow: hidden; }
+  .loghead { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 16px; border: 0; background: none; text-align: left; font-size: 12.5px; color: var(--text-2); }
+  .loghead b { color: var(--text); font-size: 13px; }
+  .last { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: 11.5px; }
+  .chev { color: var(--text-3); }
+  .logtools { display: flex; gap: 12px; align-items: center; padding: 0 16px 8px; font-size: 12px; color: var(--text-2); }
+  .logtools select { height: 28px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); padding: 0 8px; font: 12px var(--font); }
+  .lines { max-height: 320px; overflow: auto; padding: 4px 16px 12px; font-size: 11.5px; background: var(--code-bg); }
+  .ll { display: grid; grid-template-columns: 70px 48px auto 1fr; gap: 10px; padding: 1px 0; }
+  .ll .tm, .ll .at { color: var(--text-3); } .ll .lv { text-transform: uppercase; color: var(--text-3); font-size: 10.5px; }
+  .ll.warn .lv { color: var(--warn); } .ll.error .lv, .ll.error .m { color: var(--bad); }
+  .ll .at { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* The focus view of one call. */
+  .scrim { position: fixed; inset: 0; z-index: 60; background: rgba(6, 6, 10, 0.82); backdrop-filter: blur(18px) saturate(0.8); -webkit-backdrop-filter: blur(18px) saturate(0.8); }
+  :global([data-theme='light']) .scrim { background: rgba(240, 240, 246, 0.75); }
+  .stage { position: fixed; inset: 0; z-index: 61; pointer-events: none; display: grid; overflow: auto;
+    grid-template-columns: minmax(220px, 320px) minmax(0, 720px) minmax(200px, 280px); grid-template-rows: auto auto;
+    justify-content: center; align-content: center; gap: 22px 40px; padding: 28px; }
+  .stage > * { pointer-events: auto; }
+  .ftitle { grid-column: 1 / -1; justify-self: center; position: relative; max-width: 900px; padding: 14px 44px 14px 18px; border-radius: 16px; background: var(--glass-strong); border: 1px solid var(--border); box-shadow: var(--elev-2), var(--glow-soft); }
+  .ftitle h2 { margin: 8px 0 0; font-size: 18px; font-weight: 600; }
+  .st { padding: 2px 9px; border-radius: 99px; font-size: 11.5px; font-weight: 600; color: #fff; background: var(--good); }
+  .st.running { background: var(--accent); } .st.failed { background: var(--bad); } .st.cancelled { background: var(--surface-3); }
+  .k { margin-left: 8px; font-size: 12px; color: var(--text-3); }
+  .x { position: absolute; top: 10px; right: 12px; border: 0; background: none; font-size: 22px; line-height: 1; color: var(--text-3); }
+  .center { grid-column: 2; grid-row: 2; align-self: center; min-width: 0; padding: 12px; border-radius: 16px; background: var(--glass-strong); border: 1px solid rgba(139, 124, 246, 0.35); box-shadow: var(--elev-2), 0 0 90px -24px rgba(139, 124, 246, 0.5); }
+  .ch { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  h3 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+  .code { max-height: 62vh; overflow: auto; padding: 8px 0; border-radius: 10px; background: var(--code-bg); border: 1px solid var(--border); font-size: 12px; line-height: 1.6; }
+  .cl { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 14px; }
+  .working { display: flex; flex-direction: column; align-items: center; padding: 30px; color: var(--text-2); }
+  .left { grid-column: 1; grid-row: 2; align-self: center; } .right { grid-column: 3; grid-row: 2; align-self: center; display: flex; flex-direction: column; gap: 14px; }
+  .note { padding: 14px 16px; border-radius: 14px; background: var(--glass-strong); border: 1px solid var(--border); box-shadow: var(--elev-2), 0 0 40px -18px rgba(139, 124, 246, 0.35); }
+  .note p { margin: 6px 0 0; font-size: 12.5px; color: var(--text-2); }
+  .note.err { border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
+  .secs { list-style: none; margin: 0; padding: 0; max-height: 52vh; overflow: auto; }
+  .secs li { border-top: 1px solid var(--border); }
+  .secs button { display: flex; justify-content: space-between; width: 100%; gap: 8px; padding: 7px 0; border: 0; background: none; text-align: left; font-size: 12.5px; color: var(--text); }
+  .secs small { color: var(--text-3); white-space: nowrap; }
+  .secs pre { margin: 0 0 8px; max-height: 220px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: var(--code-bg); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-2); }
+  dl { display: grid; grid-template-columns: 64px 1fr; gap: 5px 10px; margin: 8px 0 0; font-size: 12.5px; }
+  dt { color: var(--text-3); } dd { margin: 0; color: var(--text-2); word-break: break-word; }
+  .links { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; } .links .b3 { justify-content: center; }
+  .kn { display: inline-block; margin: 6px 4px 0 0; font-size: 11px; color: var(--text-3); }
+  @media (max-width: 1150px) { .stage { grid-template-columns: minmax(0, 1fr); align-content: start; } .center, .left, .right { grid-column: 1; grid-row: auto; } }
+  @media (prefers-reduced-motion: reduce) { .row.running .dot { animation: none; } }
+
+  /* Long words (a full method chain, a path) wrap inside the card instead of running over the code. */
+  .note, .note p, .note li, .wside .note, .ftitle h2, .title h2 { overflow-wrap: anywhere; min-width: 0; }
+  .left, .right { min-width: 0; }
 </style>

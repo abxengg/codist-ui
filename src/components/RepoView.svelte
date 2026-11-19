@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BranchPicker from './BranchPicker.svelte';
   import { onMount } from 'svelte';
   import { app, openFile, reveal, selectNode } from '../lib/store.svelte';
   import { api } from '../lib/api';
@@ -57,7 +58,7 @@
 
 <div class="page" bind:this={pageEl} onscroll={onPageScroll}><div class="page-in">
   <header>
-    <h1>{r?.name ?? 'Repository'}</h1>
+    <div class="titlerow"><h1>{r?.name ?? 'Repository'}</h1>{#if app.featureOn('branchSwitcher')}<BranchPicker />{/if}</div>
     <p>The repository as it is on {r?.branch ?? '…'}: its services, APIs, who works on what, where it changes and what it costs.</p>
   </header>
   {#if error}<div class="pcard">Could not analyse the repository: {error}</div>
@@ -183,6 +184,8 @@
 </div>
 
 <style>
+  .titlerow { display: flex; align-items: center; gap: 12px; }
+  .titlerow h1 { margin: 0 0 3px; }
   .small { font-size: 11.5px; }
   .warn { color: var(--warn); }
   .filter { width: 100%; height: 28px; margin-bottom: 8px; padding: 0 9px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2); color: var(--text); font: inherit; font-size: 12px; }
