@@ -1,21 +1,33 @@
 <script lang="ts">
-  // The code as a graph in the manner of Obsidian's graph view: flat dots sized by their links, thin lines, physics
-  // you can push around. Hover a class and it and its neighbours light up while the rest fade; labels fade in as you
-  // zoom. Classes of one service are drawn together. A class with open issues is marked; the file the AI is reading
-  // right now is ringed. Forces can be tuned the way Obsidian lets you, and are remembered.
-  import { onMount } from 'svelte';
+  // The code as a graph, in the manner of Obsidian's graph view, in 2D or 3D. Flat dots sized by their links, lines
+  // styled by what the link means, physics you can push around. Hover lights a class and its neighbours; a card says
+  // what it is. Click opens its details: what it uses, what uses it, its methods with their cost, its endpoints and
+  // its open issues. Colour by kind, by service or by issues. In 3D the graph floats in space and can be turned.
+  import { onMount, untrack } from 'svelte';
   import { app } from '../lib/store.svelte';
   import { live } from '../lib/live.svelte';
   import { groups } from '../lib/groups';
   import { STEREOTYPE } from '../lib/theme';
   import IssueCard from './IssueCard.svelte';
-  import type { GraphNode, Issue } from '../lib/types';
+  import type { GraphEdge, GraphNode, Issue } from '../lib/types';
 
-  type N = { id: string; g: GraphNode; x: number; y: number; vx: number; vy: number; r: number; m: number; deg: number; issues: number; worst: string; pinned: boolean; label: string };
-  type E = { a: N; b: N; same: boolean };
+  type N = { id: string; g: GraphNode; x: number; y: number; z: number; vx: number; vy: number; vz: number; r: number; m: number;
+    deg: number; ins: number; outs: number; issues: number; worst: string; pinned: boolean; label: string; px: number; py: number; pz: number; ps: number };
+  type E = { a: N; b: N; same: boolean; kind: GraphEdge['kind'] };
 
-  // Forces, as Obsidian names them. Saved per browser.
-  const DEFAULTS = { center: 0.5, repel: 0.6, link: 0.5, distance: 0.45, group: true, size: 1, text: 0.55, tests: false, drift: true };
+  const KIND_COL: Record<string, string> = {
+    controller: '#5aa9ff', service: '#9b87ff', repository: '#3ccfb4', entity: '#f2b544', dto: '#9aa3b5', config: '#7a7a85',
+    component: '#7f8cff', client: '#f27bb6', advice: '#f59a4b', exception: '#f07272', other: '#a3a3ad', test: '#5f5f69',
+  };
+  const SERVICE_COL = ['#9b87ff', '#5aa9ff', '#3ccfb4', '#f2b544', '#f27bb6', '#f59a4b', '#8bd17c', '#7fd6e8', '#c99bff', '#e8a87c'];
+  const SEV_COL: Record<string, string> = { critical: '#ff5c50', high: '#ff8f40', medium: '#f2c744', low: '#a3a3ad', info: '#a3a3ad' };
+  const LINK: Record<GraphEdge['kind'], { label: string; dash: number[]; w: number }> = {
+    injects: { label: 'injects', dash: [], w: 1.2 }, uses: { label: 'uses', dash: [], w: 0.8 },
+    extends: { label: 'extends', dash: [5, 4], w: 1.1 }, implements: { label: 'implements', dash: [2, 3], w: 1.1 }, feign: { label: 'calls over HTTP', dash: [8, 4], w: 1.6 },
+  };
+
+  const DEFAULTS = { center: 0.5, repel: 0.6, link: 0.5, distance: 0.45, group: true, size: 1, text: 0.55, tests: false, drift: true,
+    three: false, colour: 'kind' as 'kind' | 'service' | 'issues', issuesOnly: false, hidden: [] as string[] };
   let f = $state({ ...DEFAULTS, ...load() });
   function load() { try { return JSON.parse(localStorage.getItem('codist.mapForces') ?? '{}'); } catch { return {}; } }
   $effect(() => { const v = JSON.stringify(f); try { localStorage.setItem('codist.mapForces', v); } catch { /* storage blocked */ } });
@@ -23,18 +35,20 @@
   let wrap: HTMLDivElement | undefined = $state();
   let canvas: HTMLCanvasElement | undefined = $state();
   let query = $state('');
-  let picked = $state<N | null>(null);
-  let hover = $state<N | null>(null);
+  let picked = $state.raw<N | null>(null); // raw: links are matched to it by identity
+  let hover = $state.raw<N | null>(null);
+  let mouse = $state({ x: 0, y: 0 });
   let panel = $state(false);
-  let count = $state({ classes: 0, services: 0, links: 0 });
+  let count = $state({ classes: 0, services: 0, links: 0, troubled: 0 });
+  let kindsHere = $state<[string, number][]>([]);
+  let modsHere = $state<string[]>([]);
 
   let nodes: N[] = [];
   let edges: E[] = [];
   let mods: string[] = [];
-  let byId = new Map<string, N>();
   let byFile = new Map<string, N>();
   let adj = new Map<N, Set<N>>();
-  const cam = { x: 0, y: 0, k: 1 };
+  const cam = { x: 0, y: 0, k: 1, yaw: 0.6, pitch: 0.35 };
   let heat = 1;
   let follow = 0;
 
@@ -43,117 +57,161 @@
     for (const g of groups(app.issueList?.issues ?? [])) for (const p of new Set(g.map((i) => i.path))) m.set(p, [...(m.get(p) ?? []), g]);
     return m;
   });
-  const pickedIssues = $derived(picked ? openByFile.get(picked.g.file) ?? [] : []);
   const ORDER = ['critical', 'high', 'medium', 'low', 'info'];
+
+  // What the detail panel shows about the picked class.
+  type Link = { n: N; kind: string };
+  let details = $state<{ uses: Link[]; usedBy: Link[]; issues: Issue[][]; methods: GraphNode['members']; fields: number } | null>(null);
+  function describe(n: N | null) {
+    if (!n) { details = null; return; }
+    const uses: Link[] = [], usedBy: Link[] = [];
+    for (const e of edges) { if (e.a === n) uses.push({ n: e.b, kind: LINK[e.kind]?.label ?? e.kind }); if (e.b === n) usedBy.push({ n: e.a, kind: LINK[e.kind]?.label ?? e.kind }); }
+    const methods = n.g.members.filter((m) => m.kind !== 'field').sort((a, b) => (b.cost?.complexity ?? 0) - (a.cost?.complexity ?? 0));
+    details = { uses, usedBy, issues: openByFile.get(n.g.file) ?? [], methods, fields: n.g.members.filter((m) => m.kind === 'field').length };
+  }
+  $effect(() => { void openByFile; describe(picked); });
 
   function build() {
     const gr = app.graph;
     if (!gr) return;
     const old = new Map(nodes.map((n) => [n.id, n]));
-    const keep = gr.nodes.filter((n) => f.tests || n.stereotype !== 'test');
+    const keep = gr.nodes.filter((n) => (f.tests || n.stereotype !== 'test') && !f.hidden.includes(n.stereotype));
     const modOf = (g: GraphNode) => g.module || g.pkg.split('.').slice(0, 3).join('.') || 'code';
     mods = [...new Set(keep.map(modOf))];
-    const deg = new Map<string, number>();
-    for (const e of gr.edges) { deg.set(e.source, (deg.get(e.source) ?? 0) + 1); deg.set(e.target, (deg.get(e.target) ?? 0) + 1); }
+    const ins = new Map<string, number>(), outs = new Map<string, number>();
+    for (const e of gr.edges) { outs.set(e.source, (outs.get(e.source) ?? 0) + 1); ins.set(e.target, (ins.get(e.target) ?? 0) + 1); }
     nodes = keep.map((g) => {
       const was = old.get(g.id);
       const m = mods.indexOf(modOf(g));
       const a = (m / Math.max(1, mods.length)) * Math.PI * 2;
-      const d = deg.get(g.id) ?? 0;
+      const d = (ins.get(g.id) ?? 0) + (outs.get(g.id) ?? 0);
       return { id: g.id, g, x: was?.x ?? Math.cos(a) * 300 + (Math.random() - 0.5) * 200, y: was?.y ?? Math.sin(a) * 300 + (Math.random() - 0.5) * 200,
-        vx: 0, vy: 0, r: 2.6 + Math.sqrt(d) * 1.3, m, deg: d, issues: 0, worst: '', pinned: false, label: g.name };
+        z: was?.z ?? (f.three ? (Math.random() - 0.5) * 300 : 0), vx: 0, vy: 0, vz: 0, r: 2.6 + Math.sqrt(d) * 1.3, m, deg: d, ins: ins.get(g.id) ?? 0,
+        outs: outs.get(g.id) ?? 0, issues: 0, worst: '', pinned: false, label: g.name, px: 0, py: 0, pz: 0, ps: 1 };
     });
-    byId = new Map(nodes.map((n) => [n.id, n]));
+    const byId = new Map(nodes.map((n) => [n.id, n]));
     byFile = new Map(nodes.map((n) => [n.g.file, n]));
     edges = gr.edges.filter((e) => byId.has(e.source) && byId.has(e.target) && e.source !== e.target)
-      .map((e) => ({ a: byId.get(e.source)!, b: byId.get(e.target)!, same: byId.get(e.source)!.m === byId.get(e.target)!.m }));
+      .map((e) => ({ a: byId.get(e.source)!, b: byId.get(e.target)!, same: byId.get(e.source)!.m === byId.get(e.target)!.m, kind: e.kind }));
     adj = new Map(nodes.map((n) => [n, new Set<N>()]));
     for (const e of edges) { adj.get(e.a)!.add(e.b); adj.get(e.b)!.add(e.a); }
-    count = { classes: nodes.length, services: mods.length, links: edges.length };
+    const kc = new Map<string, number>();
+    for (const g of gr.nodes) if (f.tests || g.stereotype !== 'test') kc.set(g.stereotype, (kc.get(g.stereotype) ?? 0) + 1);
+    kindsHere = [...kc].sort((a, b) => b[1] - a[1]);
+    modsHere = mods;
     paintIssues();
+    if (picked) picked = byId.get(picked.id) ?? null;
     heat = 1;
   }
   function paintIssues() {
+    let troubled = 0;
     for (const n of nodes) {
       const list = openByFile.get(n.g.file) ?? [];
       n.issues = list.length;
       n.worst = list.map((g) => g[0].severity).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b))[0] ?? '';
+      if (n.issues) troubled++;
     }
+    count = { classes: nodes.length, services: mods.length, links: edges.length, troubled };
   }
-  $effect(() => { void app.graph; void f.tests; build(); });
-  $effect(() => { void openByFile; paintIssues(); });
+  // Rebuild only when the graph or what is shown changes; build itself reads much else that must not trigger it.
+  $effect(() => { void app.graph; void f.tests; void f.hidden.length; untrack(build); });
+  $effect(() => { void openByFile; untrack(paintIssues); });
   $effect(() => { void f.center; void f.repel; void f.link; void f.distance; void f.group; heat = 1; });
+  $effect(() => {
+    // Into 3D: give every dot some depth to start from; back to 2D: flatten.
+    const three = f.three;
+    untrack(() => { for (const n of nodes) { n.z = three ? (Math.random() - 0.5) * 260 : 0; n.vz = 0; } heat = 1; follow = 2; });
+  });
 
-  // One step of the simulation: repulsion between nearby dots (through a grid), springs along links, a pull to the
-  // middle and, when grouping is on, a pull to the middle of each service.
+  // One step of the simulation: repulsion between nearby dots (through a grid), springs along links (weaker for very
+  // connected classes, as in d3), a pull to the middle, a pull to each service's middle, and services kept apart.
   function step(dt: number, t: number) {
+    const three = f.three;
     const repel = 400 + f.repel * 5200, rest = 20 + f.distance * 160, spring = 0.1 + f.link * 3, gravity = 0.004 + f.center * 0.08;
     const cell = Math.max(60, Math.sqrt(repel) * 1.6);
     const grid = new Map<number, N[]>();
-    const key = (i: number, j: number) => i * 100003 + j;
+    const key = (i: number, j: number, l: number) => (i * 73856093) ^ (j * 19349663) ^ (l * 83492791);
     for (const n of nodes) {
-      const k = key(Math.floor(n.x / cell), Math.floor(n.y / cell));
+      const k = key(Math.floor(n.x / cell), Math.floor(n.y / cell), three ? Math.floor(n.z / cell) : 0);
       const b = grid.get(k); b ? b.push(n) : grid.set(k, [n]);
     }
+    const lr = three ? 1 : 0;
     for (const n of nodes) {
-      const cx = Math.floor(n.x / cell), cy = Math.floor(n.y / cell);
-      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
-        const b = grid.get(key(cx + i, cy + j));
+      const cx = Math.floor(n.x / cell), cy = Math.floor(n.y / cell), cz = three ? Math.floor(n.z / cell) : 0;
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let l = -lr; l <= lr; l++) {
+        const b = grid.get(key(cx + i, cy + j, cz + l));
         if (!b) continue;
         for (const o of b) {
           if (o === n) continue;
-          let dx = n.x - o.x, dy = n.y - o.y, d2 = dx * dx + dy * dy;
-          if (d2 < 0.01) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 0.5; }
+          let dx = n.x - o.x, dy = n.y - o.y, dz = n.z - o.z, d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 < 0.01) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; dz = three ? Math.random() - 0.5 : 0; d2 = 0.5; }
           if (d2 > cell * cell) continue;
           const p = (repel / d2) * dt;
-          n.vx += dx * p; n.vy += dy * p;
+          n.vx += dx * p; n.vy += dy * p; n.vz += dz * p;
         }
       }
     }
     for (const e of edges) {
-      const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y, d = Math.hypot(dx, dy) || 1;
-      // As in d3: a link pulls less the more links its ends have, so a class everything uses does not knot the graph.
+      const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y, dz = e.b.z - e.a.z, d = Math.hypot(dx, dy, dz) || 1;
       const share = 1 / Math.max(1, Math.min(e.a.deg, e.b.deg));
       const k = ((d - (e.same ? rest : rest * 1.8)) / d) * spring * share * (e.same ? 1.6 : 0.3) * dt;
-      e.a.vx += dx * k; e.a.vy += dy * k; e.b.vx -= dx * k; e.b.vy -= dy * k;
+      e.a.vx += dx * k; e.a.vy += dy * k; e.a.vz += dz * k; e.b.vx -= dx * k; e.b.vy -= dy * k; e.b.vz -= dz * k;
     }
-    // Service centres, recomputed each step, and the pull towards them.
-    const cs = mods.map(() => ({ x: 0, y: 0, n: 0 }));
-    for (const n of nodes) { const c = cs[n.m]; c.x += n.x; c.y += n.y; c.n++; }
-    for (const c of cs) if (c.n) { c.x /= c.n; c.y /= c.n; }
-    // Services keep apart: two whose areas overlap are pushed away from each other, every class with its service.
-    const push = cs.map(() => ({ x: 0, y: 0 }));
+    const cs = mods.map(() => ({ x: 0, y: 0, z: 0, n: 0 }));
+    for (const n of nodes) { const c = cs[n.m]; c.x += n.x; c.y += n.y; c.z += n.z; c.n++; }
+    for (const c of cs) if (c.n) { c.x /= c.n; c.y /= c.n; c.z /= c.n; }
+    const push = cs.map(() => ({ x: 0, y: 0, z: 0 }));
     if (f.group) for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
       const a = cs[i], b = cs[j];
       if (!a.n || !b.n) continue;
       const ra = Math.sqrt(a.n) * (14 + rest * 0.25), rb = Math.sqrt(b.n) * (14 + rest * 0.25);
-      const dx = a.x - b.x, dy = a.y - b.y, d = Math.hypot(dx, dy) || 1, want = ra + rb + 40;
+      const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z, d = Math.hypot(dx, dy, dz) || 1, want = ra + rb + 40;
       if (d >= want) continue;
       const p = (want - d) * 0.5;
-      push[i].x += (dx / d) * p; push[i].y += (dy / d) * p; push[j].x -= (dx / d) * p; push[j].y -= (dy / d) * p;
+      push[i].x += (dx / d) * p; push[i].y += (dy / d) * p; push[i].z += (dz / d) * p;
+      push[j].x -= (dx / d) * p; push[j].y -= (dy / d) * p; push[j].z -= (dz / d) * p;
     }
     for (const n of nodes) {
-      n.vx -= n.x * gravity * dt; n.vy -= n.y * gravity * dt;
-      if (f.group && mods.length > 1) { const c = cs[n.m], p = push[n.m]; n.vx += ((c.x - n.x) * 0.5 + p.x) * dt; n.vy += ((c.y - n.y) * 0.5 + p.y) * dt; }
+      n.vx -= n.x * gravity * dt; n.vy -= n.y * gravity * dt; n.vz -= n.z * gravity * dt;
+      if (f.group && mods.length > 1) { const c = cs[n.m], p = push[n.m]; n.vx += ((c.x - n.x) * 0.5 + p.x) * dt; n.vy += ((c.y - n.y) * 0.5 + p.y) * dt; n.vz += ((c.z - n.z) * 0.5 + p.z) * dt; }
       if (f.drift) { n.vx += Math.sin(t * 0.4 + n.r * 7 + n.x * 0.01) * 0.8 * dt; n.vy += Math.cos(t * 0.37 + n.r * 5 + n.y * 0.01) * 0.8 * dt; }
-      if (n.pinned) { n.vx = 0; n.vy = 0; continue; }
-      n.vx *= 0.82; n.vy *= 0.82;
+      if (n.pinned) { n.vx = 0; n.vy = 0; n.vz = 0; continue; }
+      n.vx *= 0.82; n.vy *= 0.82; n.vz *= 0.82;
       n.x += n.vx * dt * 10 * heat; n.y += n.vy * dt * 10 * heat;
+      n.z = three ? n.z + n.vz * dt * 10 * heat : 0;
     }
     heat = Math.max(0.3, heat * 0.996);
   }
 
   function frameAll() {
     if (!nodes.length || !wrap) return null;
+    if (f.three) {
+      // In 3D the graph can turn any way, so frame the sphere that holds it.
+      let R = 1;
+      for (const n of nodes) R = Math.max(R, Math.hypot(n.x, n.y, n.z));
+      return { x: 0, y: 0, k: Math.min(2.2, (Math.min(wrap.clientWidth, wrap.clientHeight) - 120) / (2 * R * 1.08)) };
+    }
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
     for (const n of nodes) { x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x); y0 = Math.min(y0, n.y); y1 = Math.max(y1, n.y); }
-    const w = Math.max(200, x1 - x0 + 140), h = Math.max(200, y1 - y0 + 220); // room for the service names above
+    const w = Math.max(200, x1 - x0 + 140), h = Math.max(200, y1 - y0 + 220);
     return { x: -(x0 + x1) / 2, y: -(y0 + y1) / 2, k: Math.min(2.2, Math.min(wrap.clientWidth / w, wrap.clientHeight / h)) };
   }
   function fit(snap = false) {
     const t = frameAll();
     if (t && snap) Object.assign(cam, t);
     follow = snap ? 4 : 1.6;
+  }
+  function focusOn(n: N) {
+    picked = n; follow = 0;
+    if (!f.three) { cam.x = -n.x; cam.y = -n.y; }
+    cam.k = Math.max(cam.k, 1.4);
+  }
+
+  // The colour of a dot.
+  function colourOf(n: N) {
+    if (f.colour === 'service') return SERVICE_COL[n.m % SERVICE_COL.length];
+    if (f.colour === 'issues') return n.issues ? SEV_COL[n.worst] ?? SEV_COL.medium : '#6b6b76';
+    return KIND_COL[n.g.stereotype] ?? KIND_COL.other;
   }
 
   onMount(() => {
@@ -166,118 +224,156 @@
     for (let i = 0; i < (nodes.length > 300 ? 400 : 220); i++) { heat = 1; step(0.05, i * 0.05); }
     fit(true);
 
-    const toWorld = (sx: number, sy: number) => ({ x: (sx - W / 2) / cam.k - cam.x, y: (sy - H / 2) / cam.k - cam.y });
+    // Where a node is on screen: in 2D a plain zoom and pan; in 3D a turn by yaw and pitch, then perspective.
+    const project = () => {
+      const cyw = Math.cos(cam.yaw), syw = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+      for (const n of nodes) {
+        if (!f.three) { n.px = W / 2 + (n.x + cam.x) * cam.k; n.py = H / 2 + (n.y + cam.y) * cam.k; n.pz = 0; n.ps = 1; continue; }
+        const x = n.x, y = n.y, z = n.z;
+        const x1 = x * cyw - z * syw, z1 = x * syw + z * cyw;
+        const y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
+        const p = 1800 / (1800 + z2);
+        n.px = W / 2 + x1 * cam.k * p; n.py = H / 2 + y2 * cam.k * p; n.pz = z2; n.ps = Math.max(0.2, p);
+      }
+    };
     const hit = (sx: number, sy: number) => {
-      const p = toWorld(sx, sy);
       let best: N | null = null, bd = Infinity;
-      for (const n of nodes) { const d = Math.hypot(n.x - p.x, n.y - p.y); if (d < n.r * f.size + 5 / cam.k && d < bd) { best = n; bd = d; } }
+      for (const n of nodes) {
+        const d = Math.hypot(n.px - sx, n.py - sy);
+        if (d < n.r * f.size * cam.k * n.ps + 5 && d < bd) { best = n; bd = d; }
+      }
       return best;
     };
-    let drag: { n: N | null; sx: number; sy: number; cx: number; cy: number; moved: boolean } | null = null;
+    let drag: { n: N | null; sx: number; sy: number; cx: number; cy: number; yaw: number; pitch: number; moved: boolean } | null = null;
     canvas!.addEventListener('pointerdown', (e) => {
       canvas!.setPointerCapture(e.pointerId);
       const n = hit(e.offsetX, e.offsetY);
-      drag = { n, sx: e.offsetX, sy: e.offsetY, cx: cam.x, cy: cam.y, moved: false };
+      drag = { n: f.three ? null : n, sx: e.offsetX, sy: e.offsetY, cx: cam.x, cy: cam.y, yaw: cam.yaw, pitch: cam.pitch, moved: false };
+      if (f.three && n) drag.n = null, (drag as { pick?: N }).pick = n;
       follow = 0;
-      if (n) { n.pinned = true; heat = 1; }
+      if (drag.n) { drag.n.pinned = true; heat = 1; }
     });
     canvas!.addEventListener('pointermove', (e) => {
-      if (!drag) { hover = hit(e.offsetX, e.offsetY); canvas!.style.cursor = hover ? 'pointer' : 'default'; return; }
+      mouse = { x: e.offsetX, y: e.offsetY };
+      if (!drag) { hover = hit(e.offsetX, e.offsetY); canvas!.style.cursor = hover ? 'pointer' : f.three ? 'grab' : 'default'; return; }
       const dx = e.offsetX - drag.sx, dy = e.offsetY - drag.sy;
       if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
-      if (drag.n) { const p = toWorld(e.offsetX, e.offsetY); drag.n.x = p.x; drag.n.y = p.y; heat = 1; }
+      if (drag.n) { drag.n.x = (e.offsetX - W / 2) / cam.k - cam.x; drag.n.y = (e.offsetY - H / 2) / cam.k - cam.y; heat = 1; }
+      else if (f.three) { cam.yaw = drag.yaw + dx * 0.006; cam.pitch = Math.max(-1.3, Math.min(1.3, drag.pitch + dy * 0.006)); canvas!.style.cursor = 'grabbing'; }
       else { cam.x = drag.cx + dx / cam.k; cam.y = drag.cy + dy / cam.k; canvas!.style.cursor = 'grabbing'; }
     });
     canvas!.addEventListener('pointerup', () => {
+      const pick = (drag as { pick?: N } | null)?.pick;
       if (drag?.n) { drag.n.pinned = false; if (!drag.moved) picked = drag.n; }
-      else if (drag && !drag.moved) picked = null;
+      else if (drag && !drag.moved) picked = pick ?? null;
       drag = null;
     });
     canvas!.addEventListener('pointerleave', () => (hover = null));
     canvas!.addEventListener('wheel', (e) => {
       e.preventDefault();
       follow = 0;
-      const before = toWorld(e.offsetX, e.offsetY);
+      const k0 = cam.k;
       cam.k = Math.min(6, Math.max(0.08, cam.k * Math.exp(-e.deltaY * 0.0015)));
-      const after = toWorld(e.offsetX, e.offsetY);
-      cam.x += after.x - before.x; cam.y += after.y - before.y;
+      if (!f.three) { const s = 1 / cam.k - 1 / k0; cam.x += (e.offsetX - W / 2) * s; cam.y += (e.offsetY - H / 2) * s; }
     }, { passive: false });
 
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    // Hover lights up and fades smoothly, as in Obsidian.
-    let lit = 0, litNode: N | null = null;
-    let raf = 0, last = performance.now(), t = 0;
+    let lit = 0, litNode: N | null = null, raf = 0, last = performance.now(), t = 0, idle = 0;
     const frame = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now; t += dt;
       if (!reduce) step(dt, t);
+      // In 3D the graph turns slowly by itself until you take hold of it.
+      idle = drag || hover ? 0 : idle + dt;
+      if (f.three && !reduce && idle > 1.5) cam.yaw += dt * 0.08;
       if (follow > 0) {
         follow -= dt;
         const g = frameAll();
         if (g) { const k = Math.min(1, dt * 3); cam.x += (g.x - cam.x) * k; cam.y += (g.y - cam.y) * k; cam.k += (g.k - cam.k) * k; }
       }
+      project();
       const focus = hover ?? picked;
       if (focus) { litNode = focus; lit = Math.min(1, lit + dt * 6); } else lit = Math.max(0, lit - dt * 4);
       const near = litNode ? adj.get(litNode) ?? new Set<N>() : new Set<N>();
-      const css = getComputedStyle(document.documentElement);
       const dark = document.documentElement.dataset.theme !== 'light';
-      const dot = dark ? [170, 170, 178] : [110, 110, 120];
-      const line = dark ? [120, 120, 130] : [160, 160, 170];
-      const accent = [124, 92, 255];
-      const mix = (c: number[], a: number) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+      const lineRGB = dark ? '150,150,165' : '150,150,165';
+      const accent = '#8b74ff';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
-      ctx.translate(W / 2, H / 2); ctx.scale(cam.k, cam.k); ctx.translate(cam.x, cam.y);
+      const depthA = (n: N) => (f.three ? Math.max(0.15, Math.min(1, 0.55 + n.ps - 0.9)) : 1);
+      const dim = (n: N) => (f.issuesOnly && !n.issues ? 0.18 : 1);
 
-      // Lines.
-      ctx.lineWidth = Math.max(0.6, 1 / cam.k) ;
+      // Lines, styled by kind.
       for (const e of edges) {
         const on = litNode && (e.a === litNode || e.b === litNode);
-        const a = on ? 0.35 + 0.55 * lit : (e.same ? 0.32 : 0.18) * (1 - 0.75 * lit);
-        ctx.strokeStyle = mix(on ? accent : line, a);
-        ctx.beginPath(); ctx.moveTo(e.a.x, e.a.y); ctx.lineTo(e.b.x, e.b.y); ctx.stroke();
+        const style = LINK[e.kind] ?? LINK.uses;
+        const base = (e.same ? 0.3 : 0.16) * Math.min(depthA(e.a), depthA(e.b)) * Math.min(dim(e.a), dim(e.b));
+        const a = on ? 0.4 + 0.55 * lit : base * (1 - 0.75 * lit);
+        if (a < 0.015) continue;
+        ctx.strokeStyle = on ? accent : e.kind === 'feign' ? `rgba(242,123,182,${a * 1.6})` : `rgba(${lineRGB},${a})`;
+        ctx.globalAlpha = on ? a : 1;
+        ctx.lineWidth = style.w * (on ? 1.4 : 1);
+        ctx.setLineDash(style.dash);
+        ctx.beginPath(); ctx.moveTo(e.a.px, e.a.py); ctx.lineTo(e.b.px, e.b.py); ctx.stroke();
+        // An arrow shows the direction of a lit link.
+        if (on && lit > 0.3) {
+          const ang = Math.atan2(e.b.py - e.a.py, e.b.px - e.a.px), rr = e.b.r * f.size * cam.k * e.b.ps + 3;
+          const hx = e.b.px - Math.cos(ang) * rr, hy = e.b.py - Math.sin(ang) * rr;
+          ctx.setLineDash([]); ctx.fillStyle = accent;
+          ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx - Math.cos(ang - 0.45) * 7, hy - Math.sin(ang - 0.45) * 7); ctx.lineTo(hx - Math.cos(ang + 0.45) * 7, hy - Math.sin(ang + 0.45) * 7); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
       }
-      // Dots.
+      ctx.setLineDash([]);
+      // Dots, far first.
+      const draw = f.three ? [...nodes].sort((a, b) => b.pz - a.pz) : nodes;
       const reading = live.call?.status === 'running' && live.call.path ? byFile.get(live.call.path) ?? null : null;
-      for (const n of nodes) {
+      for (const n of draw) {
         const on = n === litNode, nb = near.has(n);
-        const fade = litNode && !on && !nb ? 1 - 0.8 * lit : 1;
-        const r = n.r * f.size;
-        let c = dot;
-        if (n.issues) c = n.worst === 'critical' || n.worst === 'high' ? [255, 108, 96] : [245, 190, 70];
-        if (on) c = accent;
-        ctx.fillStyle = mix(c, fade);
-        ctx.beginPath(); ctx.arc(n.x, n.y, on ? r * (1 + 0.25 * lit) : r, 0, Math.PI * 2); ctx.fill();
+        const fade = (litNode && !on && !nb ? 1 - 0.8 * lit : 1) * depthA(n) * dim(n);
+        const r = n.r * f.size * Math.max(0.6, Math.min(2.4, cam.k)) * n.ps * (on ? 1 + 0.25 * lit : 1);
+        ctx.globalAlpha = fade;
+        ctx.fillStyle = on ? accent : colourOf(n);
+        ctx.beginPath(); ctx.arc(n.px, n.py, r, 0, Math.PI * 2); ctx.fill();
+        // A class with open issues gets a small mark beside it whatever the colouring.
+        if (n.issues && f.colour !== 'issues') {
+          ctx.fillStyle = SEV_COL[n.worst] ?? SEV_COL.medium;
+          ctx.beginPath(); ctx.arc(n.px + r * 0.8, n.py - r * 0.8, Math.max(2, r * 0.42), 0, Math.PI * 2); ctx.fill();
+        }
       }
+      ctx.globalAlpha = 1;
       if (reading) {
-        ctx.strokeStyle = mix([125, 211, 252], 0.9); ctx.lineWidth = 1.5 / cam.k;
-        ctx.beginPath(); ctx.arc(reading.x, reading.y, reading.r * f.size + 5 / cam.k + Math.sin(t * 4) * 1.5 / cam.k, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = '#7dd3fc'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(reading.px, reading.py, reading.r * f.size * cam.k * reading.ps + 6 + Math.sin(t * 4) * 1.5, 0, Math.PI * 2); ctx.stroke();
       }
       if (picked) {
-        ctx.strokeStyle = mix(accent, 0.9); ctx.lineWidth = 1.5 / cam.k;
-        ctx.beginPath(); ctx.arc(picked.x, picked.y, picked.r * f.size + 4 / cam.k, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = accent; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(picked.px, picked.py, picked.r * f.size * Math.max(0.6, Math.min(2.4, cam.k)) * picked.ps + 5, 0, Math.PI * 2); ctx.stroke();
       }
       // Labels fade in with zoom; the lit node and its neighbours always show theirs.
       const zoomAlpha = Math.max(0, Math.min(1, (cam.k - (0.3 + f.text * 1.6)) * 2.5));
-      const fam = css.getPropertyValue('--font') || 'sans-serif';
+      const fam = getComputedStyle(document.documentElement).getPropertyValue('--font') || 'sans-serif';
       ctx.textAlign = 'center';
-      ctx.font = `${12 / cam.k}px ${fam}`;
-      for (const n of nodes) {
+      ctx.font = `12px ${fam}`;
+      for (const n of draw) {
         const on = n === litNode, nb = near.has(n);
-        let a = zoomAlpha;
+        let a = zoomAlpha * depthA(n) * dim(n);
         if (litNode) a = on || nb ? Math.max(a, lit) : a * (1 - 0.85 * lit);
-        if (n === reading) a = Math.max(a, 1);
-        if (a < 0.02) continue;
-        ctx.fillStyle = dark ? `rgba(220,221,230,${a})` : `rgba(40,40,50,${a})`;
-        ctx.fillText(n.label, n.x, n.y + n.r * f.size + 13 / cam.k);
+        if (n === reading) a = 1;
+        if (a < 0.03) continue;
+        ctx.fillStyle = dark ? `rgba(225,226,236,${a})` : `rgba(35,35,48,${a})`;
+        ctx.fillText(n.label, n.px, n.py + n.r * f.size * Math.max(0.6, Math.min(2.4, cam.k)) * n.ps + 13);
       }
-      // Service names, faint, when zoomed out and grouping is on.
       if (f.group && mods.length > 1 && cam.k < 0.9) {
         const cs = mods.map(() => ({ x: 0, y: 0, n: 0, top: Infinity }));
-        for (const n of nodes) { const c = cs[n.m]; c.x += n.x; c.y += n.y; c.n++; c.top = Math.min(c.top, n.y); }
-        ctx.font = `600 ${13 / cam.k}px ${fam}`;
-        ctx.fillStyle = dark ? `rgba(167,139,250,${0.75 * (1 - lit * 0.6)})` : `rgba(90,60,200,0.8)`;
-        mods.forEach((m, i) => { const c = cs[i]; if (c.n) ctx.fillText(m, c.x / c.n, c.top - 14 / cam.k); });
+        for (const n of nodes) { const c = cs[n.m]; c.x += n.px; c.y += n.py; c.n++; c.top = Math.min(c.top, n.py); }
+        ctx.font = `600 13px ${fam}`;
+        mods.forEach((m, i) => {
+          const c = cs[i];
+          if (!c.n) return;
+          ctx.fillStyle = f.colour === 'service' ? SERVICE_COL[i % SERVICE_COL.length] : dark ? `rgba(180,165,255,${0.85 * (1 - lit * 0.6)})` : 'rgba(90,60,200,0.85)';
+          ctx.fillText(m, c.x / c.n, c.top - 14);
+        });
       }
       raf = requestAnimationFrame(frame);
     };
@@ -289,24 +385,40 @@
     const q = query.trim().toLowerCase();
     if (!q) return;
     const n = nodes.find((x) => x.label.toLowerCase() === q) ?? nodes.find((x) => x.label.toLowerCase().includes(q) || x.g.fqn.toLowerCase().includes(q));
-    if (!n) return;
-    picked = n; follow = 0;
-    cam.x = -n.x; cam.y = -n.y; cam.k = Math.max(cam.k, 1.6);
+    if (n) focusOn(n);
   }
+  function toggleKind(k: string) { f.hidden = f.hidden.includes(k) ? f.hidden.filter((x: string) => x !== k) : [...f.hidden, k]; }
   const SLIDERS: [keyof typeof DEFAULTS, string][] = [['center', 'Centre force'], ['repel', 'Repel force'], ['link', 'Link force'], ['distance', 'Link distance'], ['size', 'Node size'], ['text', 'Text fade threshold']];
+  const cost = (m: GraphNode['members'][number]) => m.cost ? [m.cost.complexity > 1 ? `complexity ${m.cost.complexity}` : '', m.cost.dbCalls ? `${m.cost.dbCalls} db` : '', m.cost.remoteCalls ? `${m.cost.remoteCalls} remote` : '', m.cost.loopIo ? 'I/O in a loop' : ''].filter(Boolean).join(' · ') : '';
+  let showAllMethods = $state(false);
 </script>
 
 <div class="map" bind:this={wrap}>
   <canvas bind:this={canvas}></canvas>
+
   <div class="hud tl">
     <input placeholder="Find a class…" bind:value={query} onkeydown={(e) => e.key === 'Enter' && find()} spellcheck="false" />
-    <span class="facts">{count.services} service{count.services === 1 ? '' : 's'} · {count.classes} classes · {count.links} links</span>
+    <div class="facts">
+      <span><b>{count.services}</b> services</span><span><b>{count.classes}</b> classes</span><span><b>{count.links}</b> links</span>
+      {#if count.troubled}<button class="tr-btn" class:on={f.issuesOnly} onclick={() => (f.issuesOnly = !f.issuesOnly)} title="Fade the classes without open issues"><b>{count.troubled}</b> with issues</button>{/if}
+    </div>
   </div>
+
   <div class="hud tr">
-    <button onclick={() => fit()} title="Frame everything">Fit</button>
-    <button class:on={panel} onclick={() => (panel = !panel)} aria-expanded={panel}>Forces</button>
-    <button onclick={() => (app.mode = 'graph')} title="The detailed structure graph, with cycles, layers and blast radius">Structure</button>
+    <div class="seg">
+      <button class:on={!f.three} onclick={() => (f.three = false)}>2D</button>
+      <button class:on={f.three} onclick={() => (f.three = true)}>3D</button>
+    </div>
+    <div class="seg">
+      {#each [['kind', 'Kind'], ['service', 'Service'], ['issues', 'Issues']] as [v, l]}
+        <button class:on={f.colour === v} onclick={() => (f.colour = v as typeof f.colour)}>{l}</button>
+      {/each}
+    </div>
+    <button class="b3" onclick={() => fit()} title="Frame everything">Fit</button>
+    <button class="b3" class:primary={panel} onclick={() => (panel = !panel)} aria-expanded={panel}>Forces</button>
+    <button class="b3" onclick={() => (app.mode = 'graph')} title="The detailed structure graph: cycles, layers, blast radius">Structure</button>
   </div>
+
   {#if panel}
     <div class="forces">
       {#each SLIDERS as [k, label]}
@@ -318,66 +430,142 @@
       <button class="reset" onclick={() => (f = { ...DEFAULTS })}>Reset</button>
     </div>
   {/if}
+
   <div class="legend">
-    <span><i class="d"></i>Class, sized by links</span>
-    <span><i class="d warn"></i>Open issues</span>
-    <span><i class="d bad"></i>Serious issues</span>
-    <span><i class="ring"></i>AI reading now</span>
+    {#if f.colour === 'kind'}
+      {#each kindsHere as [k, n]}
+        <button class:off={f.hidden.includes(k)} onclick={() => toggleKind(k)} title="Show or hide {STEREOTYPE[k]?.label ?? k}">
+          <i style:background={KIND_COL[k] ?? KIND_COL.other}></i>{STEREOTYPE[k]?.label ?? k} <small>{n}</small>
+        </button>
+      {/each}
+    {:else if f.colour === 'service'}
+      {#each modsHere as m, i}<span><i style:background={SERVICE_COL[i % SERVICE_COL.length]}></i>{m}</span>{/each}
+    {:else}
+      {#each ['critical', 'high', 'medium'] as s}<span><i style:background={SEV_COL[s]}></i>{s}</span>{/each}<span><i style:background="#6b6b76"></i>no open issue</span>
+    {/if}
+    <span class="sep"></span>
+    <span class="ln"><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="currentColor" stroke-width="1.2" /></svg>injects / uses</span>
+    <span class="ln"><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="currentColor" stroke-width="1.2" stroke-dasharray="5 4" /></svg>extends</span>
+    <span class="ln"><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="#f27bb6" stroke-width="1.6" stroke-dasharray="8 4" /></svg>HTTP call</span>
+    <span class="ln"><i class="ring"></i>AI reading</span>
   </div>
-  {#if picked}
+
+  {#if hover && hover !== picked}
+    <div class="hovercard" style:left="{Math.min(mouse.x + 16, (wrap?.clientWidth ?? 800) - 260)}px" style:top="{mouse.y + 16}px">
+      <div class="hc-t"><i style:background={KIND_COL[hover.g.stereotype] ?? KIND_COL.other}></i><b>{hover.label}</b></div>
+      <div class="hc-s">{STEREOTYPE[hover.g.stereotype]?.label ?? hover.g.stereotype}{hover.g.module ? ` · ${hover.g.module}` : ''}</div>
+      <div class="hc-n"><span>uses <b>{hover.outs}</b></span><span>used by <b>{hover.ins}</b></span><span>methods <b>{hover.g.members.filter((m) => m.kind !== 'field').length}</b></span>{#if hover.issues}<span class="bad">issues <b>{hover.issues}</b></span>{/if}</div>
+    </div>
+  {/if}
+
+  {#if picked && details}
     <aside class="card">
       <header>
+        <i class="o" style:background={KIND_COL[picked.g.stereotype] ?? KIND_COL.other}></i>
         <div><h2>{picked.g.name}</h2><p class="mono">{picked.g.pkg}</p></div>
         <button class="x" aria-label="Close" onclick={() => (picked = null)}>×</button>
       </header>
-      <dl>
-        <dt>Kind</dt><dd>{STEREOTYPE[picked.g.stereotype]?.label ?? picked.g.stereotype}</dd>
-        {#if picked.g.module}<dt>Service</dt><dd>{picked.g.module}</dd>{/if}
-        <dt>Links</dt><dd>{picked.deg}</dd>
-        <dt>Members</dt><dd>{picked.g.members.length}</dd>
-        {#if picked.g.endpoints.length}<dt>Endpoints</dt><dd class="mono">{picked.g.endpoints.slice(0, 4).join(', ')}{picked.g.endpoints.length > 4 ? ' …' : ''}</dd>{/if}
-        <dt>File</dt><dd class="mono">{picked.g.file}</dd>
-      </dl>
-      {#if pickedIssues.length}
-        <h3>Open issues here</h3>
-        <div class="issues">{#each pickedIssues as g (g[0].id)}<IssueCard {g} />{/each}</div>
-      {:else}
-        <p class="calm">No open issues in this class.</p>
+      <div class="tags">
+        <span>{STEREOTYPE[picked.g.stereotype]?.label ?? picked.g.stereotype}</span>
+        {#if picked.g.module}<span>{picked.g.module}</span>{/if}
+        {#each picked.g.annotations.slice(0, 4) as a}<span class="mono">@{a.replace(/^@/, '')}</span>{/each}
+      </div>
+      <div class="nums">
+        <div><b>{details.uses.length}</b><span>uses</span></div>
+        <div><b>{details.usedBy.length}</b><span>used by</span></div>
+        <div><b>{details.methods.length}</b><span>methods</span></div>
+        <div><b>{details.fields}</b><span>fields</span></div>
+        <div class:bad={details.issues.length}><b>{details.issues.length}</b><span>open issues</span></div>
+      </div>
+      {#if details.issues.length}
+        <h3>Open issues</h3>
+        <div class="issues">{#each details.issues as g (g[0].id)}<IssueCard {g} />{/each}</div>
       {/if}
+      {#if picked.g.endpoints.length}
+        <h3>Endpoints</h3>
+        <ul class="plain mono">{#each picked.g.endpoints as ep}<li>{ep}</li>{/each}</ul>
+      {/if}
+      {#if details.usedBy.length}
+        <h3>Used by</h3>
+        <div class="links">{#each details.usedBy as l}<button onclick={() => focusOn(l.n)}><i style:background={colourOf(l.n)}></i>{l.n.label}<small>{l.kind}</small></button>{/each}</div>
+      {/if}
+      {#if details.uses.length}
+        <h3>Uses</h3>
+        <div class="links">{#each details.uses as l}<button onclick={() => focusOn(l.n)}><i style:background={colourOf(l.n)}></i>{l.n.label}<small>{l.kind}</small></button>{/each}</div>
+      {/if}
+      {#if details.methods.length}
+        <h3>Methods <small>most complex first</small></h3>
+        <ul class="methods">
+          {#each showAllMethods ? details.methods : details.methods.slice(0, 8) as m}
+            <li><span class="mono">{m.name}</span><small>line {m.startLine}{cost(m) ? ` · ${cost(m)}` : ''}</small></li>
+          {/each}
+        </ul>
+        {#if details.methods.length > 8}<button class="more" onclick={() => (showAllMethods = !showAllMethods)}>{showAllMethods ? 'Fewer' : `All ${details.methods.length}`}</button>{/if}
+      {/if}
+      <p class="file mono">{picked.g.file}:{picked.g.startLine}</p>
     </aside>
   {/if}
 </div>
 
 <style>
-  .map { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--map-bg, var(--canvas)); }
+  .map { position: relative; flex: 1; min-height: 0; overflow: hidden; }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
-  .hud { position: absolute; display: flex; gap: 8px; align-items: center; }
-  .tl { top: 14px; left: 14px; } .tr { top: 14px; right: 14px; }
-  .hud input { width: 220px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); color: var(--text); background: var(--surface); font-size: 13px; }
+  .hud { position: absolute; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .tl { top: 14px; left: 14px; flex-direction: column; align-items: flex-start; }
+  .tr { top: 14px; right: 14px; justify-content: flex-end; }
+  .hud input { width: 240px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); color: var(--text); background: var(--glass); box-shadow: var(--elev-1); font-size: 13px; }
   .hud input:focus { outline: none; border-color: var(--accent); }
-  .facts { font-size: 11.5px; color: var(--text-3); }
-  .hud button { height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); font-size: 12.5px; color: var(--text-2); }
-  .hud button:hover, .hud button.on { color: var(--text); border-color: var(--border-strong); }
-  .forces { position: absolute; top: 54px; right: 14px; width: 250px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;
-    border-radius: 10px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); font-size: 12px; color: var(--text-2); }
+  .facts { display: flex; gap: 12px; font-size: 11.5px; color: var(--text-3); align-items: center; }
+  .facts b { color: var(--text-2); font-weight: 600; }
+  .tr-btn { border: 1px solid var(--border); background: var(--glass); border-radius: 99px; padding: 2px 9px; font-size: 11.5px; color: var(--text-3); }
+  .tr-btn b { color: #ff8f40; } .tr-btn.on { color: var(--text); border-color: #ff8f40; }
+  .seg { display: flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--glass); box-shadow: var(--elev-1); border: 1px solid var(--border); }
+  .seg button { border: 0; background: none; height: 26px; padding: 0 10px; border-radius: 8px; font-size: 12px; color: var(--text-3); }
+  .seg button.on { color: var(--text); background: var(--surface-3); box-shadow: inset 0 1px 0 var(--edge), 0 2px 0 rgba(0, 0, 0, 0.4); }
+  .forces { position: absolute; top: 60px; right: 14px; width: 250px; padding: 14px; display: flex; flex-direction: column; gap: 10px;
+    border-radius: 14px; border: 1px solid var(--border); background: var(--glass-strong); box-shadow: var(--elev-2); font-size: 12px; color: var(--text-2); z-index: 3; }
   .forces label { display: flex; flex-direction: column; gap: 4px; }
   .forces input[type='range'] { width: 100%; accent-color: var(--accent); }
   .forces .tog { flex-direction: row; align-items: center; gap: 8px; }
   .reset { align-self: flex-start; border: 0; background: none; padding: 0; color: var(--text-3); font-size: 12px; }
-  .legend { position: absolute; left: 14px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 14px; font-size: 11px; color: var(--text-3); pointer-events: none; }
-  .legend span { display: flex; align-items: center; gap: 6px; }
-  .d { width: 7px; height: 7px; border-radius: 50%; background: #aaaab2; }
-  .d.warn { background: #f5be46; } .d.bad { background: #ff6c60; }
-  .ring { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #7dd3fc; }
-  .card { position: absolute; top: 54px; right: 14px; bottom: 14px; width: min(400px, calc(100% - 28px)); overflow: auto; padding: 16px;
-    border-radius: 12px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
+  .legend { position: absolute; left: 14px; right: 14px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 11.5px; color: var(--text-3); }
+  .legend button, .legend span { display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; color: inherit; font-size: inherit; }
+  .legend button:hover { color: var(--text); } .legend button.off { opacity: 0.35; text-decoration: line-through; }
+  .legend i { width: 8px; height: 8px; border-radius: 50%; }
+  .legend small { color: var(--text-3); opacity: 0.7; }
+  .legend .sep { width: 1px; height: 14px; background: var(--border-strong); }
+  .legend .ln { color: var(--text-3); }
+  .ring { width: 9px !important; height: 9px !important; border-radius: 50%; border: 1.5px solid #7dd3fc; background: none; }
+  .hovercard { position: absolute; width: 240px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--glass-strong);
+    box-shadow: var(--elev-2); pointer-events: none; font-size: 12px; z-index: 4; }
+  .hc-t { display: flex; align-items: center; gap: 8px; } .hc-t i { width: 9px; height: 9px; border-radius: 50%; } .hc-t b { font-size: 13px; }
+  .hc-s { color: var(--text-3); margin: 2px 0 8px 17px; }
+  .hc-n { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-3); } .hc-n b { color: var(--text); } .hc-n .bad b { color: #ff8f40; }
+  .card { position: absolute; top: 60px; right: 14px; bottom: 44px; width: min(420px, calc(100% - 28px)); overflow: auto; padding: 18px;
+    border-radius: 16px; border: 1px solid var(--border); background: var(--glass-strong); box-shadow: var(--elev-2); z-index: 3; animation: in 0.2s ease-out; }
+  @keyframes in { from { opacity: 0; transform: translateY(6px); } }
   .card header { display: flex; gap: 12px; align-items: flex-start; }
-  h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  .o { width: 12px; height: 12px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+  h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
   .card header p { margin: 2px 0 0; font-size: 11.5px; color: var(--text-3); word-break: break-all; }
   .x { margin-left: auto; border: 0; background: none; font-size: 20px; line-height: 1; color: var(--text-3); }
-  dl { display: grid; grid-template-columns: 90px 1fr; gap: 6px 10px; margin: 16px 0; font-size: 12.5px; }
-  dt { color: var(--text-3); } dd { margin: 0; word-break: break-word; }
-  h3 { margin: 18px 0 8px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+  .tags span { padding: 2px 8px; border-radius: 99px; font-size: 11px; color: var(--text-2); background: var(--surface-2); box-shadow: inset 0 1px 0 var(--edge); }
+  .nums { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 4px 0 6px; }
+  .nums div { display: flex; flex-direction: column; align-items: center; padding: 8px 4px; border-radius: 10px; background: var(--surface-2); box-shadow: inset 0 1px 0 var(--edge), 0 2px 0 rgba(0, 0, 0, 0.3); }
+  .nums b { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; } .nums span { font-size: 10.5px; color: var(--text-3); }
+  .nums .bad b { color: #ff8f40; }
+  h3 { margin: 18px 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+  h3 small { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; }
   .issues { display: flex; flex-direction: column; gap: 8px; }
-  .calm { color: var(--text-3); font-size: 12.5px; }
+  .plain { list-style: none; margin: 0; padding: 0; font-size: 12px; color: var(--text-2); display: grid; gap: 3px; }
+  .links { display: flex; flex-wrap: wrap; gap: 6px; }
+  .links button { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 1px solid var(--border); border-radius: 99px; background: var(--surface-2); font-size: 12px; color: var(--text); }
+  .links button:hover { border-color: var(--accent); }
+  .links i { width: 7px; height: 7px; border-radius: 50%; } .links small { color: var(--text-3); font-size: 10.5px; }
+  .methods { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .methods li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .methods small { color: var(--text-3); text-align: right; }
+  .more { margin-top: 6px; border: 0; background: none; padding: 0; color: var(--accent-text); font-size: 12px; }
+  .file { margin: 18px 0 0; font-size: 11px; color: var(--text-3); word-break: break-all; }
 </style>

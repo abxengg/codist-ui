@@ -4,6 +4,7 @@
   import { preload } from './lib/highlight';
   import TopBar from './components/TopBar.svelte';
   import Rail from './components/Rail.svelte';
+  import Space from './components/Space.svelte';
   import NowView from './components/NowView.svelte';
   import IssuesView from './components/IssuesView.svelte';
   import CommitsView from './components/CommitsView.svelte';
@@ -113,6 +114,7 @@
 
 <svelte:window onkeydown={keys} />
 
+<Space />
 <div class="window">
 <Rail />
 <div class="shell">
@@ -185,7 +187,7 @@
   .drawer :global(.panel) { flex: 1; min-width: 0; }
   @keyframes drawer-in { from { transform: translateX(28px); opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }
-  .window { height: 100%; display: flex; }
+  .window { position: relative; z-index: 1; height: 100%; display: flex; }
   .shell { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; }
   .op { padding: 7px 16px; font-size: 12.5px; color: var(--text); background: color-mix(in srgb, var(--warn) 14%, var(--surface)); border-bottom: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }
   .op .mono { font-size: 11.5px; }

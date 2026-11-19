@@ -65,7 +65,7 @@
 
 <style>
   .commits { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); }
-  .list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); }
+  .list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--glass); box-shadow: 10px 0 30px -20px rgba(0, 0, 0, 0.8); position: relative; z-index: 1; }
   .tools { display: flex; gap: 8px; padding: 14px; border-bottom: 1px solid var(--border); }
   .tools input { flex: 1; min-width: 0; height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; }
   .tools input:focus { outline: none; border-color: rgba(124, 92, 255, 0.6); }
@@ -76,7 +76,7 @@
   .rows { flex: 1; min-height: 0; overflow: auto; padding: 6px; }
   .row { display: flex; align-items: center; gap: 11px; width: 100%; padding: 9px 10px; border: 0; border-radius: 11px; background: none; text-align: left; }
   .row:hover { background: var(--hover); }
-  .row.on { background: var(--active); box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.35); }
+  .row.on { background: var(--surface-3); box-shadow: inset 0 1px 0 var(--edge), 0 2px 0 rgba(0, 0, 0, 0.35), 0 8px 18px -10px rgba(0, 0, 0, 0.7); }
   .st { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex-shrink: 0; }
   .st.queued, .st.running { background: var(--lane-model); animation: pulse 1.4s ease-in-out infinite; }
   .st.bad { background: var(--sev-high); } .st.failed { background: var(--bad); }
@@ -89,10 +89,10 @@
   .cnt { color: #fff; background: var(--sev-high); }
   .ai { color: #c4b5fd; background: rgba(124, 92, 255, 0.18); }
   .risk { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); }
-  .detail { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  .detail { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: color-mix(in srgb, var(--bg) 70%, transparent); }
   .switch { display: flex; gap: 4px; padding: 12px 20px 0; }
   .switch button { border: 0; background: none; height: 30px; padding: 0 12px; border-radius: 9px; font-size: 12.5px; color: var(--text-3); }
-  .switch button.on { color: var(--text); background: var(--surface-2); }
+  .switch button.on { color: var(--text); background: var(--surface-3); box-shadow: inset 0 1px 0 var(--edge), 0 2px 0 rgba(0, 0, 0, 0.4); }
   .detail :global(.diff), .detail > :global(*:last-child) { flex: 1; min-height: 0; }
   .ai-view { flex: 1; min-height: 0; overflow: auto; padding: 12px 20px; max-width: 900px; }
   .empty { color: var(--text-3); padding: 12px; } .pad { padding: 40px; }

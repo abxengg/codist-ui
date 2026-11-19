@@ -48,18 +48,18 @@
       <div class="actions">
         {#if i.state === 'open'}
           {#if app.status?.canFix !== false}
-            <button class="btn primary" onclick={() => proposeFix(asFinding(i), i.lastSeen, others(g))}>{i.ref && INSTANT_REFS.has(i.ref) ? 'Fix' : 'Fix with AI'}</button>
+            <button class="b3 primary" onclick={() => proposeFix(asFinding(i), i.lastSeen, others(g))}>{i.ref && INSTANT_REFS.has(i.ref) ? 'Fix' : 'Fix with AI'}</button>
           {/if}
-          <button class="btn" onclick={() => issueAction(g, 'fixed')}>Mark fixed</button>
-          <button class="btn" onclick={openCommit}>Open commit</button>
+          <button class="b3" onclick={() => issueAction(g, 'fixed')}>Mark fixed</button>
+          <button class="b3" onclick={openCommit}>Open commit</button>
           {#if i.source === 'llm'}
             <span class="judge">
-              <button class="btn ghost" class:on={judged === 'useful'} title="Right: show more like this" onclick={() => { judged = 'useful'; void api_feedback(i.id, 'useful'); }}>Useful</button>
-              <button class="btn ghost" class:on={judged === 'wrong'} title="Wrong: Codist hides it and learns from it" onclick={() => { judged = 'wrong'; void api_feedback(i.id, 'wrong'); }}>Wrong</button>
+              <button class="b3 ghost" class:on={judged === 'useful'} title="Right: show more like this" onclick={() => { judged = 'useful'; void api_feedback(i.id, 'useful'); }}>Useful</button>
+              <button class="b3 ghost" class:on={judged === 'wrong'} title="Wrong: Codist hides it and learns from it" onclick={() => { judged = 'wrong'; void api_feedback(i.id, 'wrong'); }}>Wrong</button>
             </span>
           {/if}
         {:else}
-          <button class="btn" onclick={() => issueAction(g, 'reopen')}>Reopen</button>
+          <button class="b3" onclick={() => issueAction(g, 'reopen')}>Reopen</button>
         {/if}
       </div>
     </div>
@@ -68,8 +68,9 @@
 
 <style>
   .card { --c: var(--text-3); border-radius: 14px; background: var(--glass, var(--surface)); border: 1px solid var(--border);
-    transition: border-color 0.2s, background 0.2s, transform 0.2s; overflow: hidden; }
-  .card:hover { border-color: var(--border-strong); }
+    box-shadow: var(--elev-1); transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s; overflow: hidden; container-type: inline-size; }
+  .card:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--elev-2); }
+  .card.open { transform: none; box-shadow: var(--elev-2); }
   .card.open { border-color: color-mix(in srgb, var(--c) 45%, var(--border)); }
   .sev-critical { --c: var(--sev-critical); } .sev-high { --c: var(--sev-high); } .sev-medium { --c: var(--sev-medium); }
   .sev-low, .sev-info { --c: var(--sev-low); }
@@ -89,9 +90,11 @@
   .link { border: 0; background: none; padding: 0; color: var(--accent-text); }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .judge { margin-left: auto; display: flex; gap: 4px; }
-  .btn { height: 30px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--surface-2); font-size: 12.5px; }
-  .btn:hover { background: var(--surface-3); }
-  .btn.primary { border: 0; color: #fff; background: var(--accent); }
-  .btn.ghost { background: none; border-color: transparent; color: var(--text-3); }
-  .btn.ghost.on { color: var(--text); border-color: var(--border-strong); }
+  /* In a narrow place (the Map's panel) the title gets its own line and the details go under it. */
+  @container (max-width: 520px) {
+    .head { flex-wrap: wrap; row-gap: 4px; }
+    .title { white-space: normal; flex-basis: calc(100% - 24px); }
+    .meta { width: 100%; padding-left: 21px; }
+    .body { padding-left: 16px; }
+  }
 </style>

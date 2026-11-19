@@ -28,7 +28,7 @@
 
 <div class="now">
   <section class="hero">
-    <Orb mood={live.mood} size={140} label={live.sentence} />
+    <Orb mood={live.mood} size={170} label={live.sentence} />
     <h1>{live.sentence}</h1>
     <p class="sub">
       {#if live.call?.status === 'running'}
@@ -96,9 +96,9 @@
   .sub b { color: var(--text); font-weight: 600; }
   .stats { position: relative; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 26px; }
   .stat { display: flex; flex-direction: column; align-items: center; min-width: 116px; padding: 12px 16px; border-radius: 16px; border: 1px solid var(--border);
-    background: var(--glass, var(--surface)); backdrop-filter: blur(12px); color: inherit; }
-  button.stat:hover { border-color: var(--border-strong); transform: translateY(-1px); }
-  .stat { transition: transform 0.2s, border-color 0.2s; }
+    background: var(--glass, var(--surface)); box-shadow: var(--elev-1); color: inherit; }
+  button.stat:hover { border-color: var(--border-strong); transform: translateY(-2px); box-shadow: var(--elev-2); }
+  .stat { transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s; }
   .stat b { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .stat span { font-size: 11.5px; color: var(--text-3); }
   .grad { color: var(--accent-text); }
@@ -110,10 +110,10 @@
   .more { border: 0; background: none; color: var(--text-3); font-size: 12px; } .more:hover { color: var(--text); }
   .list { display: flex; flex-direction: column; gap: 8px; }
   .empty { color: var(--text-3); }
-  .calm { display: flex; gap: 14px; align-items: center; padding: 18px; border-radius: 16px; border: 1px solid var(--border); background: var(--glass, var(--surface)); }
+  .calm { display: flex; gap: 14px; align-items: center; padding: 18px; border-radius: 16px; border: 1px solid var(--border); background: var(--glass, var(--surface)); box-shadow: var(--elev-1); }
   .calm p { margin: 2px 0 0; color: var(--text-3); font-size: 12.5px; }
   .ok { width: 12px; height: 12px; border-radius: 50%; background: var(--good); flex-shrink: 0; }
-  .commits { display: flex; flex-direction: column; border-radius: 16px; border: 1px solid var(--border); background: var(--glass, var(--surface)); overflow: hidden; }
+  .commits { display: flex; flex-direction: column; border-radius: 16px; border: 1px solid var(--border); background: var(--glass, var(--surface)); box-shadow: var(--elev-1); overflow: hidden; }
   .commit { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--border); background: none; text-align: left; }
   .commit:last-child { border-bottom: 0; }
   .commit:hover { background: var(--hover); }

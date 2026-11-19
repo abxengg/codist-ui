@@ -32,7 +32,7 @@
   </div>
   <div class="foot">
     <button class="mini" title={live.sentence} onclick={() => (app.mode = 'now')}>
-      <Orb mood={live.mood} size={18} label={live.sentence} />
+      <Orb mood={live.mood} size={26} label={live.sentence} />
     </button>
     <button class="item small" title="Use the {app.theme === 'dark' ? 'light' : 'dark'} appearance" aria-label="Change appearance" onclick={() => setTheme(app.theme === 'dark' ? 'light' : 'dark')}>
       <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11Z" fill="currentColor" stroke="none"/></svg>
@@ -42,14 +42,14 @@
 
 <style>
   .rail { display: flex; flex-direction: column; align-items: center; width: 60px; flex-shrink: 0; padding: 12px 0 10px; gap: 10px;
-    background: var(--rail-bg, var(--sidebar)); border-right: 1px solid var(--border); position: relative; z-index: 20; }
+    background: var(--rail-bg, var(--sidebar)); border-right: 1px solid var(--border); box-shadow: 8px 0 30px -18px rgba(0, 0, 0, 0.8); position: relative; z-index: 20; }
   .mark { width: 36px; height: 36px; display: grid; place-items: center; border: 0; background: none; border-radius: 12px; }
   .dotmark { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
   .items { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
   .item { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 12px; background: none;
     color: var(--text-3); transition: background 0.2s, color 0.2s; }
   .item:hover { color: var(--text); background: var(--hover); }
-  .item.on { color: var(--text); background: var(--active); }
+  .item.on { color: var(--text); background: var(--surface-3); box-shadow: inset 0 1px 0 var(--edge), 0 2px 0 rgba(0, 0, 0, 0.4), 0 6px 14px -6px rgba(0, 0, 0, 0.6); }
   .item.on::before { content: ''; position: absolute; left: -10px; top: 10px; bottom: 10px; width: 3px; border-radius: 3px;
     background: var(--accent); }
   .item.small { width: 32px; height: 32px; }
