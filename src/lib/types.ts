@@ -347,7 +347,7 @@ export interface AskMessage {
   error?: boolean;
 }
 
-export type Mode = 'review' | 'graph' | 'repo' | 'branches' | 'mine' | 'team' | 'release' | 'incidents' | 'activity' | 'memory';
+export type Mode = 'now' | 'issues' | 'commits' | 'map' | 'review' | 'graph' | 'repo' | 'branches' | 'mine' | 'team' | 'release' | 'incidents' | 'activity' | 'memory';
 
 export interface Frame { class: string; method: string; file: string; line: number }
 

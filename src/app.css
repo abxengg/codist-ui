@@ -2,10 +2,10 @@
 
 :root,
 :root[data-theme='dark'] {
-  --bg: #1c1c1e;
-  --sidebar: #242426;
-  --surface: #232325;
-  --surface-2: #2c2c2e;
+  --bg: #0c0c11;
+  --sidebar: #101016;
+  --surface: #15151d;
+  --surface-2: #1d1d27;
   --surface-3: #3a3a3c;
   --hover: rgba(255, 255, 255, 0.06);
   --active: rgba(255, 255, 255, 0.1);
@@ -115,6 +115,31 @@ body {
   overflow: hidden;
 }
 #app { height: 100%; }
+
+/* The future-facing layer: glass surfaces, a deep backdrop with a faint aurora, and the colours of the AI. */
+:root, :root[data-theme='dark'] {
+  --glass: rgba(24, 24, 34, 0.62);
+  --glass-strong: rgba(18, 18, 27, 0.86);
+  --rail-bg: rgba(12, 12, 18, 0.9);
+  --map-bg: #15151a;
+  --surface-3: #282836;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --accent: #7c5cff;
+  --accent-text: #a78bfa;
+  --accent-soft: rgba(124, 92, 255, 0.2);
+}
+:root[data-theme='light'] {
+  --glass: rgba(255, 255, 255, 0.7);
+  --glass-strong: rgba(255, 255, 255, 0.9);
+  --rail-bg: rgba(250, 250, 253, 0.92);
+  --map-bg: #fafafa;
+  --accent: #6d4aff;
+  --accent-text: #5b3ce0;
+  --accent-soft: rgba(109, 74, 255, 0.14);
+}
+body { background: radial-gradient(1200px 700px at 70% -10%, rgba(124, 92, 255, 0.07), transparent 60%), var(--bg); }
+:root[data-theme='light'] body { background: radial-gradient(1200px 700px at 70% -10%, rgba(124, 92, 255, 0.06), transparent 60%), var(--bg); }
 button { font: inherit; color: inherit; cursor: pointer; }
 code, pre, .mono { font-family: var(--mono); font-size: 12px; font-variant-ligatures: none; }
 ::selection { background: var(--accent-soft); }
@@ -252,7 +277,7 @@ kbd {
 .glyph.round { border-radius: 50%; }
 
 /* Full-page screens */
-.page { flex: 1; min-height: 0; overflow: auto; background: var(--bg); }
+.page { flex: 1; min-height: 0; overflow: auto; background: transparent; }
 .page-in { max-width: 1120px; margin: 0 auto; padding: 26px 28px 72px; display: grid; gap: 18px; }
 .page-in > header h1 { margin: 0 0 3px; font-size: 24px; font-weight: 700; letter-spacing: -0.015em; }
 .page-in > header p { margin: 0; color: var(--text-2); }

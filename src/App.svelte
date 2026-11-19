@@ -3,7 +3,12 @@
   import { app, boot, savePref, saveStr, selectCommit } from './lib/store.svelte';
   import { preload } from './lib/highlight';
   import TopBar from './components/TopBar.svelte';
-  import Sidebar from './components/Sidebar.svelte';
+  import Rail from './components/Rail.svelte';
+  import NowView from './components/NowView.svelte';
+  import IssuesView from './components/IssuesView.svelte';
+  import CommitsView from './components/CommitsView.svelte';
+  import LiveGraph from './components/LiveGraph.svelte';
+  import { live } from './lib/live.svelte';
   import LeftDock from './components/LeftDock.svelte';
   import RepoView from './components/RepoView.svelte';
   import ActivityView from './components/ActivityView.svelte';
@@ -16,9 +21,11 @@
   let dragging = $state<'side' | 'panel' | null>(null);
 
   // The screen is in the address, so a reload or a bookmark lands in the same place.
-  const SCREENS = ['review', 'graph', 'incidents', 'memory', 'activity', 'repo', 'branches', 'mine', 'team', 'release'];
+  const SCREENS = ['now', 'issues', 'commits', 'map', 'review', 'graph', 'incidents', 'memory', 'activity', 'repo', 'branches', 'mine', 'team', 'release'];
   const wanted = location.hash.slice(1);
-  if (SCREENS.includes(wanted)) app.mode = wanted as typeof app.mode;
+  app.mode = SCREENS.includes(wanted) ? (wanted as typeof app.mode) : 'now';
+  // The new screens fill the window themselves; the classic ones keep their top bar.
+  const NEW = new Set(['now', 'issues', 'commits', 'map']);
   $effect(() => {
     history.replaceState(null, '', `#${app.mode}`);
     app.drawer = false; // a drawer belongs to the page it opened on
@@ -36,6 +43,7 @@
     }
     preload();
     void boot();
+    live.start();
   });
 
   // Persist layout choices and let the graph canvas re-measure after the grid changes.
@@ -106,9 +114,9 @@
 <svelte:window onkeydown={keys} />
 
 <div class="window">
-<Sidebar />
+<Rail />
 <div class="shell">
-  <TopBar />
+  {#if !NEW.has(app.mode)}<TopBar />{/if}
   {#if app.status?.operation}
     <div class="op" role="status">
       <b>{app.status.operation[0].toUpperCase() + app.status.operation.slice(1)} in progress</b>
@@ -116,7 +124,15 @@
       · fixes are paused until it is finished or aborted.
     </div>
   {/if}
-  {#if app.mode === 'incidents'}
+  {#if app.mode === 'now'}
+    <NowView />
+  {:else if app.mode === 'issues'}
+    <IssuesView />
+  {:else if app.mode === 'commits'}
+    <CommitsView />
+  {:else if app.mode === 'map'}
+    <LiveGraph />
+  {:else if app.mode === 'incidents'}
     <IncidentsView />
   {:else if app.mode === 'repo'}
     <!-- It describes the followed branch, so it loads again when that changes. -->

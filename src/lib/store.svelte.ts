@@ -511,6 +511,17 @@ export async function ignoreFinding(f: FindingWithPath | FindingWithPath[], scop
  * Records what a person thinks of a finding. "wrong" sets the issue aside so it is not reported again; "useful" keeps
  * it; "" takes the judgement back. The judgements are kept as evaluation data.
  */
+/** Records a person's judgement of an issue: useful or wrong. Wrong ones are hidden and teach the triage. */
+export async function api_feedback(id: string, verdict: '' | 'useful' | 'wrong') {
+  try {
+    await api.feedback(id, verdict);
+    toast(verdict === 'wrong' ? 'Marked wrong: Codist will hide it and learn' : 'Marked useful', 'good', 2500);
+    void loadIssues();
+  } catch {
+    toast('Could not save that', 'bad');
+  }
+}
+
 export async function judgeFinding(members: FindingWithPath[], verdict: '' | 'useful' | 'wrong') {
   const ids = [...new Set(members.map((m) => m.issueId).filter((x): x is string => !!x))];
   try {
@@ -760,7 +771,9 @@ export function connect() {
     const short = d.sha.slice(0, 7);
     if (d.status === 'done') {
       const total = Object.values(d.counts ?? {}).reduce((a, b) => a + (b ?? 0), 0);
-      toast(total ? `Review of ${short} found ${total} new issue${total > 1 ? 's' : ''}` : `Review of ${short}: no new issues`, total ? 'warn' : 'good', 6000);
+      if (total) window.dispatchEvent(new Event('codist:found')); // the orb flares
+      // Only findings are worth a toast: while a long history is checked, "no new issues" for each commit is noise.
+      if (total) toast(`Review of ${short} found ${total} new issue${total > 1 ? 's' : ''}`, 'warn', 6000);
       await Promise.all([loadCommits(), loadIssues()]);
     } else if (d.status === 'failed') {
       toast(`Review of ${short} failed`, 'bad', 6000);
