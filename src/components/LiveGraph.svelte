@@ -439,7 +439,7 @@
         ctx.font = `11px ${fam}`;
         ctx.fillText(n.label, n.px, below);
         // A second, quieter line: links in and out, and the size of the class.
-        if (f.meta && (on || nb || cam.k > 1.7)) {
+        if (f.meta && cam.k > 1.7) { // only when zoomed in, never just on hover
           ctx.font = `10px ${fam}`;
           ctx.fillStyle = dark ? `rgba(150,151,165,${a * 0.9})` : `rgba(90,90,105,${a * 0.9})`;
           ctx.fillText(`${n.ins} in · ${n.outs} out · ${n.lines} lines`, n.px, below + 12);
