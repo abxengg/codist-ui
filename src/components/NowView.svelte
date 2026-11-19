@@ -33,7 +33,7 @@
     <div class="light" aria-hidden="true"></div>
     <!-- The name, with the AI's orb as its "o". -->
     <div class="wordmark" aria-label="Codist">
-      <span aria-hidden="true">C</span><span class="o"><Orb mood={live.mood} size={96} label={live.sentence} /></span><span aria-hidden="true">dist</span>
+      <span aria-hidden="true">C</span><span class="o"><Orb mood={live.mood} size={128} label={live.sentence} /></span><span aria-hidden="true">dist</span>
     </div>
     <h1>{live.sentence}</h1>
     <p class="sub">
@@ -46,16 +46,16 @@
       {/if}
     </p>
     <div class="stats">
-      <button class="stat" onclick={() => (app.mode = 'issues')}><b>{open.length}</b><span>open issues</span></button>
-      <button class="stat" onclick={() => { app.foundBy = 'llm'; app.mode = 'issues'; }}><b class="grad">{ai}</b><span>found by AI</span></button>
-      <button class="stat" onclick={() => (app.mode = 'commits')}><b>{reviewed}</b><span>commits reviewed</span></button>
-      <div class="stat"><b>{live.waiting}</b><span>waiting for AI</span></div>
-      <div class="stat"><b>{fixedWeek}</b><span>fixed this week</span></div>
+      <button class="stat fl" onclick={() => (app.mode = 'issues')}><b>{open.length}</b><span>open issues</span></button>
+      <button class="stat fl" onclick={() => { app.foundBy = 'llm'; app.mode = 'issues'; }}><b class="grad">{ai}</b><span>found by AI</span></button>
+      <button class="stat fl" onclick={() => (app.mode = 'commits')}><b>{reviewed}</b><span>commits reviewed</span></button>
+      <div class="stat fl"><b>{live.waiting}</b><span>waiting for AI</span></div>
+      <div class="stat fl"><b>{fixedWeek}</b><span>fixed this week</span></div>
     </div>
   </section>
 
   <div class="cols">
-    <section class="block">
+    <section class="block panel fl p1">
       <header><h2>Needs your attention</h2><span class="hr">{#if open.length > attention.length}<button class="more" onclick={() => (app.mode = 'issues')}>All {open.length} →</button>{/if}</span></header>
       {#if !app.issueList}
         <p class="empty">Loading…</p>
@@ -67,7 +67,7 @@
     </section>
 
     <aside class="side">
-      <section class="block">
+      <section class="block panel fl p2">
         <header><h2>Latest commits</h2><button class="more" onclick={() => (app.mode = 'commits')}>All →</button></header>
         <div class="commits">
           {#each latest as c (c.commit.sha)}
@@ -81,7 +81,7 @@
         </div>
       </section>
       {#if live.recent.length}
-        <section class="block">
+        <section class="block panel fl p3">
           <header><h2>What the AI just did</h2><button class="more" onclick={() => (app.mode = 'activity')}>Activity →</button></header>
           <ol class="feed">
             {#each live.recent.slice(0, 5) as a (a.id)}
@@ -99,7 +99,7 @@
   .brandbar { display: flex; align-items: center; gap: 10px; padding: 20px 0 0; max-width: 1280px; margin: 0 auto; }
   .brandbar .repo { font-size: 13px; font-weight: 600; color: var(--text-2); }
   .brandbar span { font-size: 12.5px; color: var(--text-3); }
-  .hero { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 36px 0 28px; }
+  .hero { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 72px 0 40px; }
   /* The orb as a light source: a soft pool of its colour behind it, breathing slowly. */
   .light { position: absolute; top: -40px; left: 50%; width: 760px; height: 460px; transform: translateX(-50%); pointer-events: none;
     background: radial-gradient(closest-side, rgba(124, 100, 255, 0.16), rgba(124, 100, 255, 0.05) 55%, transparent); filter: blur(10px);
@@ -107,13 +107,13 @@
   @keyframes breathe { 50% { opacity: 0.65; transform: translateX(-50%) scale(0.96); } }
   @media (prefers-reduced-motion: reduce) { .light { animation: none; } }
   .hero > :global(*:not(.light)) { position: relative; }
-  .wordmark { display: flex; align-items: center; font-size: clamp(84px, 11vw, 150px); font-weight: 650; letter-spacing: -0.05em; line-height: 1; color: var(--text); margin-top: 8px; }
+  .wordmark { display: flex; align-items: center; font-size: clamp(110px, 14vw, 200px); font-weight: 650; letter-spacing: -0.05em; line-height: 1; color: var(--text); margin-top: 8px; }
   .wordmark .o { display: inline-flex; align-items: center; justify-content: center; width: 0.66em; height: 0.66em; margin: 0.16em 0.03em 0 0.05em; }
   .wordmark .o :global(.orb) { width: 100% !important; height: 100% !important; }
   h1 { position: relative; margin: 22px 0 6px; font-size: clamp(17px, 1.8vw, 21px); font-weight: 500; letter-spacing: -0.01em; color: var(--text-2); }
   .sub { position: relative; margin: 0; color: var(--text-2); font-size: 14px; }
   .sub b { color: var(--text); font-weight: 600; }
-  .stats { position: relative; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 26px; }
+  .stats { position: relative; display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 34px; }
   .stat { display: flex; flex-direction: column; align-items: center; min-width: 116px; padding: 12px 16px; border-radius: 16px; border: 1px solid var(--border);
     background: var(--glass, var(--surface)); box-shadow: var(--elev-1); color: inherit; }
   button.stat:hover { border-color: rgba(139, 116, 255, 0.45); transform: translateY(-2px); box-shadow: var(--elev-2), var(--glow-soft); }
@@ -124,6 +124,17 @@
   .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 28px; max-width: 1280px; margin: 0 auto; }
   @media (max-width: 1000px) { .cols { grid-template-columns: 1fr; } }
   .block { margin-bottom: 24px; }
+  /* Everything on Now floats: panels and tiles drift gently, each on its own rhythm. */
+  .panel { padding: 16px 16px 14px; border-radius: 18px; background: var(--glass); border: 1px solid var(--border); box-shadow: var(--elev-2), var(--glow-soft); }
+  .panel .commits { box-shadow: none; }
+  .fl { animation: drift 9s ease-in-out infinite; }
+  .stats .fl:nth-child(1) { animation-duration: 8s; } .stats .fl:nth-child(2) { animation-duration: 9.5s; animation-delay: -2s; }
+  .stats .fl:nth-child(3) { animation-duration: 8.5s; animation-delay: -4s; } .stats .fl:nth-child(4) { animation-duration: 10s; animation-delay: -1s; }
+  .stats .fl:nth-child(5) { animation-duration: 9s; animation-delay: -3s; }
+  .p1 { animation-duration: 12s; } .p2 { animation-duration: 11s; animation-delay: -3s; } .p3 { animation-duration: 13s; animation-delay: -6s; }
+  @keyframes drift { 50% { transform: translateY(-6px); } }
+  button.stat.fl:hover { animation-play-state: paused; }
+  @media (prefers-reduced-motion: reduce) { .fl { animation: none; } }
   header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
   h2 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
   .hr { display: flex; gap: 14px; align-items: baseline; }
