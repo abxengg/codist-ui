@@ -33,7 +33,7 @@
     <div class="light" aria-hidden="true"></div>
     <!-- The name, with the AI's orb as its "o". -->
     <div class="wordmark" aria-label="Codist">
-      <span aria-hidden="true">C</span><span class="o"><Orb mood={live.mood} size={66} label={live.sentence} /></span><span aria-hidden="true">dist</span>
+      <span aria-hidden="true">C</span><span class="o"><Orb mood={live.mood} size={96} label={live.sentence} /></span><span aria-hidden="true">dist</span>
     </div>
     <h1>{live.sentence}</h1>
     <p class="sub">
@@ -107,7 +107,7 @@
   @keyframes breathe { 50% { opacity: 0.65; transform: translateX(-50%) scale(0.96); } }
   @media (prefers-reduced-motion: reduce) { .light { animation: none; } }
   .hero > :global(*:not(.light)) { position: relative; }
-  .wordmark { display: flex; align-items: center; font-size: clamp(64px, 8vw, 104px); font-weight: 650; letter-spacing: -0.05em; line-height: 1; color: var(--text); margin-top: 8px; }
+  .wordmark { display: flex; align-items: center; font-size: clamp(84px, 11vw, 150px); font-weight: 650; letter-spacing: -0.05em; line-height: 1; color: var(--text); margin-top: 8px; }
   .wordmark .o { display: inline-flex; align-items: center; justify-content: center; width: 0.66em; height: 0.66em; margin: 0.16em 0.03em 0 0.05em; }
   .wordmark .o :global(.orb) { width: 100% !important; height: 100% !important; }
   h1 { position: relative; margin: 22px 0 6px; font-size: clamp(17px, 1.8vw, 21px); font-weight: 500; letter-spacing: -0.01em; color: var(--text-2); }

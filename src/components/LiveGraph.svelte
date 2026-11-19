@@ -132,6 +132,8 @@
     byFile = new Map(nodes.map((n) => [n.g.file, n]));
     edges = gr.edges.filter((e) => byId.has(e.source) && byId.has(e.target) && e.source !== e.target)
       .map((e) => ({ a: byId.get(e.source)!, b: byId.get(e.target)!, same: byId.get(e.source)!.m === byId.get(e.target)!.m, kind: e.kind }));
+    // Opening straight into 3D: start every class at its service's spot on the sphere, so there is depth at once.
+    if (f.three && !old.size) for (const n of nodes) { const a = anchor(n.m); n.x = a.x + (Math.random() - 0.5) * 80; n.y = a.y + (Math.random() - 0.5) * 80; n.z = a.z + (Math.random() - 0.5) * 80; }
     adj = new Map(nodes.map((n) => [n, new Set<N>()]));
     for (const e of edges) { adj.get(e.a)!.add(e.b); adj.get(e.b)!.add(e.a); }
     const kc = new Map<string, number>();
@@ -159,11 +161,17 @@
   $effect(() => {
     // Into 3D: give every dot some depth to start from; back to 2D: flatten.
     const three = f.three;
-    untrack(() => { for (const n of nodes) { n.z = three ? (Math.random() - 0.5) * 260 : 0; n.vz = 0; } heat = 1; follow = 2; });
+    untrack(() => { for (const n of nodes) { if (three) { const a = anchor(n.m); n.x = a.x + (Math.random() - 0.5) * 80; n.y = a.y + (Math.random() - 0.5) * 80; n.z = a.z + (Math.random() - 0.5) * 80; } else n.z = 0; n.vz = 0; } heat = 1; follow = 2; });
   });
 
   // One step of the simulation: repulsion between nearby dots (through a grid), springs along links (weaker for very
   // connected classes, as in d3), a pull to the middle, a pull to each service's middle, and services kept apart.
+  // In 3D each service gets a spot spread over a sphere, so the graph has depth instead of lying in one plane.
+  function anchor(m: number) {
+    const M = Math.max(1, mods.length), y = M === 1 ? 0 : 1 - (2 * (m + 0.5)) / M, r = Math.sqrt(1 - y * y), a = m * 2.399963;
+    const R = 140 + Math.sqrt(nodes.length) * 14;
+    return { x: Math.cos(a) * r * R, y: y * R, z: Math.sin(a) * r * R };
+  }
   function step(dt: number, t: number) {
     const three = f.three;
     const repel = 400 + f.repel * 5200, rest = 20 + f.distance * 160, spring = 0.1 + f.link * 3, gravity = 0.004 + f.center * 0.08;
@@ -214,6 +222,7 @@
     }
     for (const n of nodes) {
       n.vx -= n.x * gravity * dt; n.vy -= n.y * gravity * dt; n.vz -= n.z * gravity * dt;
+      if (three && mods.length > 1) { const a = anchor(n.m); n.vx += (a.x - n.x) * 0.06 * dt; n.vy += (a.y - n.y) * 0.06 * dt; n.vz += (a.z - n.z) * 0.06 * dt; }
       if (f.group && mods.length > 1) { const c = cs[n.m], p = push[n.m]; n.vx += ((c.x - n.x) * 0.5 + p.x) * dt; n.vy += ((c.y - n.y) * 0.5 + p.y) * dt; n.vz += ((c.z - n.z) * 0.5 + p.z) * dt; }
       if (f.drift) { n.vx += Math.sin(t * 0.4 + n.r * 7 + n.x * 0.01) * 0.8 * dt; n.vy += Math.cos(t * 0.37 + n.r * 5 + n.y * 0.01) * 0.8 * dt; }
       if (n.pinned) { n.vx = 0; n.vy = 0; n.vz = 0; continue; }
