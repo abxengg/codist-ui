@@ -4,7 +4,7 @@
   import { slide } from 'svelte/transition';
   import { app, api_feedback, issueAction, proposeFix, selectCommit } from '../lib/store.svelte';
   import { ago, INSTANT_REFS } from '../lib/theme';
-  import CodeBlock from './CodeBlock.svelte';
+  import CodePeek from './CodePeek.svelte';
   import type { FindingWithPath, FixRef, Issue } from '../lib/types';
 
   let { g, open = false }: { g: Issue[]; open?: boolean } = $props();
@@ -12,6 +12,7 @@
   let shown = $state(false);
   $effect(() => { shown = open; });
   const file = $derived(i.path.slice(i.path.lastIndexOf('/') + 1));
+  const sha = $derived(i.lastSeen && i.lastSeen !== 'working' ? i.lastSeen : null);
   const asFinding = (x: Issue): FindingWithPath =>
     ({ line: x.reviewLine, endLine: x.reviewLine, severity: x.severity, category: x.category, title: x.title, detail: x.detail,
        suggestion: x.suggestion, nodeId: '', onChangedLine: true, source: x.source, ref: x.ref, snippet: x.snippet, path: x.path }) as FindingWithPath;
@@ -34,10 +35,15 @@
       <span class="when">{i.firstTime ? ago(i.firstTime) : ''}</span>
     </span>
   </button>
+  {#if !shown && app.showCode}
+    <div class="peek-wrap"><CodePeek path={i.path} {sha} line={i.reviewLine || i.line} around={2} /></div>
+  {:else if !shown && i.snippet}
+    <div class="snip mono">{i.line}<span>{i.snippet}</span></div>
+  {/if}
   {#if shown}
     <div class="body" transition:slide={{ duration: 180 }}>
       {#if i.detail}<p class="why">{i.detail}</p>{/if}
-      {#if i.snippet}<div class="code"><CodeBlock code={i.snippet} /></div>{/if}
+      <div class="code"><CodePeek path={i.path} {sha} line={i.reviewLine || i.line} around={5} /></div>
       {#if i.suggestion}<p class="fix"><b>Suggestion</b> {i.suggestion}</p>{/if}
       <p class="origin">
         <span class="mono">{i.path}:{i.line}</span>
@@ -83,6 +89,9 @@
   .chk { padding: 1px 7px; border-radius: 99px; color: var(--text-2); background: var(--surface-3); }
   .where { color: var(--text-2); }
   .body { padding: 0 16px 14px 35px; }
+  .peek-wrap { padding: 0 14px 12px 35px; }
+  .snip { display: flex; gap: 12px; margin: -4px 14px 11px 35px; font-size: 12px; color: var(--text-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .snip span { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
   .why { margin: 0 0 10px; color: var(--text-2); font-size: 13px; line-height: 1.55; max-width: 80ch; }
   .code { margin: 8px 0; }
   .fix { margin: 8px 0; font-size: 13px; color: var(--text-2); } .fix b { color: var(--text); font-weight: 600; margin-right: 6px; }
@@ -95,6 +104,7 @@
     .head { flex-wrap: wrap; row-gap: 4px; }
     .title { white-space: normal; flex-basis: calc(100% - 24px); }
     .meta { width: 100%; padding-left: 21px; }
-    .body { padding-left: 16px; }
+    .body, .peek-wrap { padding-left: 16px; }
+    .snip { margin-left: 16px; }
   }
 </style>

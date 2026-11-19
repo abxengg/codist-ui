@@ -4,11 +4,11 @@
   import { preload } from './lib/highlight';
   import TopBar from './components/TopBar.svelte';
   import Rail from './components/Rail.svelte';
-  import Space from './components/Space.svelte';
   import NowView from './components/NowView.svelte';
   import IssuesView from './components/IssuesView.svelte';
   import CommitsView from './components/CommitsView.svelte';
   import LiveGraph from './components/LiveGraph.svelte';
+  import StructureView from './components/StructureView.svelte';
   import { live } from './lib/live.svelte';
   import LeftDock from './components/LeftDock.svelte';
   import RepoView from './components/RepoView.svelte';
@@ -26,7 +26,7 @@
   const wanted = location.hash.slice(1);
   app.mode = SCREENS.includes(wanted) ? (wanted as typeof app.mode) : 'now';
   // The new screens fill the window themselves; the classic ones keep their top bar.
-  const NEW = new Set(['now', 'issues', 'commits', 'map']);
+  const NEW = new Set(['now', 'issues', 'commits', 'map', 'graph']);
   $effect(() => {
     history.replaceState(null, '', `#${app.mode}`);
     app.drawer = false; // a drawer belongs to the page it opened on
@@ -52,6 +52,7 @@
     savePref('commits', app.showCommits);
     savePref('panel', app.showPanel);
     savePref('legend', app.showLegend);
+    savePref('showCode', app.showCode);
     requestAnimationFrame(() => window.dispatchEvent(new Event('codist:resize')));
   });
 
@@ -114,7 +115,6 @@
 
 <svelte:window onkeydown={keys} />
 
-<Space />
 <div class="window">
 <Rail />
 <div class="shell">
@@ -134,6 +134,8 @@
     <CommitsView />
   {:else if app.mode === 'map'}
     <LiveGraph />
+  {:else if app.mode === 'graph'}
+    <StructureView />
   {:else if app.mode === 'incidents'}
     <IncidentsView />
   {:else if app.mode === 'repo'}

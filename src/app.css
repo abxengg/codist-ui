@@ -125,7 +125,7 @@ body {
   --elev-2: inset 0 1px 0 var(--edge), 0 2px 4px rgba(0, 0, 0, 0.5), 0 22px 48px -14px rgba(0, 0, 0, 0.85);
   --accent-edge: #4a33b8;
   --rail-bg: rgba(12, 12, 18, 0.9);
-  --map-bg: #15151a;
+  --map-bg: #111116;
   --surface-3: #282836;
   --border: rgba(255, 255, 255, 0.07);
   --border-strong: rgba(255, 255, 255, 0.14);

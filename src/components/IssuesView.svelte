@@ -28,6 +28,7 @@
         <button class:on={view === v} onclick={() => (view = v as Issue["state"])}>{l} <i>{groups(all, v as Issue['state']).length}</i></button>
       {/each}
     </div>
+    <label class="codetog"><input type="checkbox" bind:checked={app.showCode} /> Show code</label>
     <input class="search" placeholder="Search issues, files, rules…" bind:value={q} spellcheck="false" />
   </div>
   <div class="fchips">
@@ -62,7 +63,9 @@
   .seg button { border: 0; background: none; height: 28px; padding: 0 12px; border-radius: 8px; font-size: 12.5px; color: var(--text-2); }
   .seg button.on { background: var(--surface-3); color: var(--text); box-shadow: inset 0 1px 0 var(--edge), 0 2px 6px -2px rgba(0, 0, 0, 0.6); }
   .seg i, .fchip i, h2 i { font-style: normal; color: var(--text-3); margin-left: 3px; font-variant-numeric: tabular-nums; }
-  .search { margin-left: auto; flex: 0 1 300px; min-width: 0; height: 34px; padding: 0 14px; border-radius: 11px; border: 1px solid var(--border);
+  .codetog { margin-left: auto; display: flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--text-2); cursor: pointer; }
+  .codetog input { accent-color: var(--accent); margin: 0; }
+  .search { flex: 0 1 300px; min-width: 0; height: 34px; padding: 0 14px; border-radius: 11px; border: 1px solid var(--border);
     background: var(--surface); color: var(--text); font-size: 13px; }
   .search:focus { outline: none; border-color: rgba(124, 92, 255, 0.6); box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.15); }
   .fchips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 18px 0 22px; }

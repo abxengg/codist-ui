@@ -132,6 +132,8 @@ class AppState {
   /** Show only issues found by the AI model ('llm') or by a code check or a run ('rule'). */
   foundBy = $state<'llm' | 'rule' | null>(null);
   hubQuery = $state('');
+  /** Issue lists show the code around each issue without opening it. */
+  showCode = $state(pref('showCode', true));
   /** The issue open in the hub's detail view (id of its root). */
   picked = $state<string | null>(null);
   ask = $state<AskMessage[]>([]);

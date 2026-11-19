@@ -50,7 +50,7 @@
 
   <div class="cols">
     <section class="block">
-      <header><h2>Needs your attention</h2>{#if open.length > attention.length}<button class="more" onclick={() => (app.mode = 'issues')}>All {open.length} →</button>{/if}</header>
+      <header><h2>Needs your attention</h2><span class="hr"><label class="codetog"><input type="checkbox" bind:checked={app.showCode} /> Show code</label>{#if open.length > attention.length}<button class="more" onclick={() => (app.mode = 'issues')}>All {open.length} →</button>{/if}</span></header>
       {#if !app.issueList}
         <p class="empty">Loading…</p>
       {:else if attention.length === 0}
@@ -107,6 +107,9 @@
   .block { margin-bottom: 24px; }
   header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
   h2 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+  .hr { display: flex; gap: 14px; align-items: baseline; }
+  .codetog { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--text-3); cursor: pointer; }
+  .codetog input { accent-color: var(--accent); margin: 0; }
   .more { border: 0; background: none; color: var(--text-3); font-size: 12px; } .more:hover { color: var(--text); }
   .list { display: flex; flex-direction: column; gap: 8px; }
   .empty { color: var(--text-3); }
