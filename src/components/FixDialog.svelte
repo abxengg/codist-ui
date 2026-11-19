@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { modal, scrim } from '../lib/motion';
+  import { fade, fly, scale } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
+  import { live } from '../lib/live.svelte';
+  import Orb from './Orb.svelte';
   import type { FixCheck } from '../lib/types';
   import { app, applyFix, closeFix, toast } from '../lib/store.svelte';
   import { api } from '../lib/api';
@@ -100,6 +103,45 @@
     if (e.key === 'Escape' && app.fix.busy !== 'applying') closeFix();
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && app.fix.proposal && !app.fix.busy) void applyFix(message);
   }
+
+  // How long the model has been at it, for the waiting view.
+  let started = 0;
+  let now = $state(Date.now());
+  $effect(() => {
+    if (app.fix?.busy !== 'generating') return;
+    started = Date.now();
+    const t = setInterval(() => (now = Date.now()), 500);
+    return () => clearInterval(t);
+  });
+  const secs = $derived(Math.max(0, Math.round((now - started) / 1000)));
+  const words = $derived(live.call?.status === 'running' ? live.call.replyTokens ?? 0 : 0);
+  const phase = $derived(live.call?.status === 'running' && (live.call as { phase?: string }).phase === 'writing' ? 'Writing the change' : 'Reading the code around it');
+
+  // Lines from the floating cards to the change, redrawn while the cards drift.
+  let stage: HTMLDivElement | undefined = $state();
+  let wires = $state<{ d: string; key: string }[]>([]);
+  $effect(() => {
+    if (!app.fix?.proposal || !stage) { wires = []; return; }
+    let raf = 0;
+    const draw = () => {
+      const to = stage!.querySelector('.change')?.getBoundingClientRect();
+      const out: { d: string; key: string }[] = [];
+      for (const key of ['why', 'check', 'warn', 'msg']) {
+        const c = stage!.querySelector('.n-' + key)?.getBoundingClientRect();
+        if (!c || !to) continue;
+        const right = c.left > to.left + to.width / 2;
+        const x1 = right ? c.left : c.right, y1 = c.top + Math.min(26, c.height / 2);
+        const x2 = right ? to.right : to.left, y2 = Math.max(to.top + 40, Math.min(to.bottom - 40, y1));
+        const dx = Math.max(30, Math.abs(x2 - x1) * 0.5) * (right ? -1 : 1);
+        out.push({ key, d: `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}` });
+      }
+      wires = out;
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  });
+  const ease = { easing: cubicOut };
 </script>
 
 <svelte:window onkeydown={key} />
@@ -107,185 +149,199 @@
 {#if app.fix}
   {@const f = app.fix}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="backdrop" transition:scrim onclick={() => { if (!f.busy && !f.proposal) closeFix(); }}></div>
-  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="fix-title" transition:modal={{ base: 'translate(-50%, -50%)' }}>
-    <header>
-      <div>
-        <h2 id="fix-title">Fix: {f.finding.title}</h2>
-        <div class="sub mono">
+  <div class="scrim" transition:fade={{ duration: 260, ...ease }} onclick={() => { if (!f.busy && !f.proposal) closeFix(); }}></div>
+
+  {#if f.busy === 'generating' || (!f.proposal && !f.error)}
+    <!-- Waiting: the orb at work in the middle, what it is doing under it. -->
+    <div class="wait" role="dialog" aria-modal="true" aria-label="Preparing a fix" transition:scale={{ start: 0.94, opacity: 0, duration: 320, ...ease }}>
+      <Orb mood={words ? 'writing' : 'reading'} size={150} label="Preparing a fix" />
+      <p class="kicker">Preparing a fix</p>
+      <h2>{f.finding.title}</h2>
+      <p class="where mono">{f.finding.path}{f.finding.line ? ':' + f.finding.line : ''}</p>
+      <p class="progress">{phase} · {secs} s{words ? ` · ${words} words written` : ''} · {app.status?.model ?? 'the model'}</p>
+      <p class="hint">Usually 20 to 60 seconds. Esc or Cancel stops the model.</p>
+      <button class="b3" onclick={closeFix}>Cancel</button>
+    </div>
+  {:else}
+    <svg class="wires" aria-hidden="true" in:fade|global={{ duration: 400, delay: 250 }} out:fade|global={{ duration: 120 }}>
+      <defs><marker id="fix-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" /></marker></defs>
+      {#each wires as w (w.key)}<path class="wire w-{w.key}" d={w.d} marker-end="url(#fix-arrow)" />{/each}
+    </svg>
+    <div class="stage" bind:this={stage} role="dialog" aria-modal="true" aria-labelledby="fix-title">
+      <header class="title float f1" transition:fly|global={{ y: -16, duration: 300, ...ease }}>
+        <span class="tag">Fix</span>
+        <h2 id="fix-title">{f.finding.title}</h2>
+        <p class="sub mono">
           {#if f.proposal && f.proposal.paths.length > 1}{f.proposal.paths.length} files: {f.proposal.paths.map((p) => p.split('/').pop()).join(', ')}{:else}{f.finding.path}{f.finding.line ? ':' + f.finding.line : ''}{/if}
           {f.proposal ? (f.proposal.working ? ' · working tree, not committed' : ` · commit to ${f.proposal.branch}`) : ''}
-        </div>
-      </div>
-      <button class="icon-btn" aria-label={f.busy === 'generating' ? 'Cancel' : 'Close'} title={f.busy === 'generating' ? 'Cancel and stop the model' : 'Close'} disabled={f.busy === 'applying'} onclick={closeFix}>
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>
-      </button>
-    </header>
+        </p>
+        <button class="x" aria-label="Close" disabled={f.busy === 'applying'} onclick={closeFix}>×</button>
+      </header>
 
-    <div class="body">
-      {#if f.busy === 'generating'}
-        <div class="state"><span class="spinner"></span>Generating a fix with {app.status?.model ?? 'the model'}… this takes 20–60 s.</div>
-      {:else if f.proposal}
-        {#if f.finding.detail || f.finding.suggestion}
-          <section class="why">
-            <span class="label">Why this change</span>
-            {#if f.finding.detail}<p>{f.finding.detail}</p>{/if}
-            {#if f.finding.suggestion}<p class="rec"><b>Recommendation:</b> {f.finding.suggestion}</p>{/if}
-          </section>
-        {/if}
-        {#if check}
-          <div class="check {check === 'running' ? 'running' : check.status}" role="status">
-            {#if check === 'running'}Compiling and testing this fix in a separate copy. You can still decide now.
-            {:else if check.status === 'passed'}<b>Compiles, and the tests pass.</b> Checked in a separate copy in {Math.round(check.tookMs / 1000)} s.
-            {:else if check.status === 'failed'}<b>{check.step === 'tests' ? 'Compiles, but tests fail.' : 'This fix does not compile.'}</b>{#if check.output}<pre>{check.output}</pre>{/if}
-            {:else}<b>Could not check this fix.</b> {check.output}{/if}
+      {#if f.proposal}
+        <section class="change" transition:scale|global={{ start: 0.95, opacity: 0, duration: 320, ...ease }}>
+          <div class="diff-head">
+            <span class="mono plus">+{stats.add}</span><span class="mono minus">−{stats.del}</span>
+            <span class="grow"></span>
+            <div class="seg">
+              <button class:on={view === 'split'} onclick={() => (view = 'split')}>Side by side</button>
+              <button class:on={view === 'unified'} onclick={() => (view = 'unified')}>Unified</button>
+            </div>
+            <CopyButton text={f.proposal.patch} title="Copy the patch" label="Patch" />
           </div>
-        {/if}
-        {#if untouched}
-          <p class="warn"><b>The flagged line is unchanged:</b> <code>{flagged}</code>. Check that this really fixes the problem before applying it.</p>
-        {/if}
-        <div class="diff-head">
-          <span class="label">Old and new</span>
-          <span class="mono plus">+{stats.add}</span><span class="mono minus">−{stats.del}</span>
-          <span class="grow"></span>
-          <div class="seg">
-            <button class:on={view === 'split'} onclick={() => (view = 'split')}>Side by side</button>
-            <button class:on={view === 'unified'} onclick={() => (view = 'unified')}>Unified</button>
-          </div>
-          <CopyButton text={f.proposal.patch} title="Copy the patch" label="Patch" />
-        </div>
-        {#if view === 'split'}
-          <div class="split-head"><span>Current</span><span>Proposed</span></div>
-          <div class="split-diff">
-            {#each rows as [o, n]}
-              {#if o.kind === 'fileh' || o.kind === 'hunk'}
-                <div class="wide {o.kind}">{o.text}</div>
-              {:else}
-                <div class="cell {o.kind}">{o.text || ' '}</div>
-                <div class="cell {n.kind}">{n.text || ' '}</div>
-              {/if}
-            {/each}
-          </div>
-        {:else}
-          <pre class="diff">{#each lines as l}<span class={cls(l)}>{l || ' '}</span>{/each}</pre>
-        {/if}
+          {#if view === 'split'}
+            <div class="split-head"><span>Now</span><span>After the fix</span></div>
+            <div class="split-diff">
+              {#each rows as [o, n]}
+                {#if o.kind === 'fileh' || o.kind === 'hunk'}
+                  <div class="wide {o.kind}">{o.text}</div>
+                {:else}
+                  <div class="cell {o.kind}">{o.text || ' '}</div>
+                  <div class="cell {n.kind}">{n.text || ' '}</div>
+                {/if}
+              {/each}
+            </div>
+          {:else}
+            <pre class="diff">{#each lines as l}<span class={cls(l)}>{l || ' '}</span>{/each}</pre>
+          {/if}
+        </section>
 
-        {#if f.proposal?.working}
-          <p class="faint small">This fixes your uncommitted changes, so it is applied to the working tree and not committed. Commit it together with your changes.</p>
-        {:else}
-          <div class="lab"><label class="label" for="fix-msg">Commit message</label><CopyButton text={message} title="Copy the message" /></div>
-          <textarea id="fix-msg" class="mono" rows="5" bind:value={message} spellcheck="false"></textarea>
-        {/if}
+        <aside class="left">
+          {#if f.finding.detail || f.finding.suggestion}
+            <div class="note n-why float f2" in:fly|global={{ x: -28, duration: 340, delay: 120, ...ease }} out:fly|global={{ x: -20, duration: 200 }}>
+              <h3>Why this change</h3>
+              {#if f.finding.detail}<p>{f.finding.detail}</p>{/if}
+              {#if f.finding.suggestion}<p class="rec">{f.finding.suggestion}</p>{/if}
+            </div>
+          {/if}
+          {#if check}
+            <div class="note n-check float f3 {check === 'running' ? 'running' : check.status}" in:fly|global={{ x: -28, duration: 340, delay: 180, ...ease }} out:fly|global={{ x: -20, duration: 200 }}>
+              <h3>Built and tested</h3>
+              {#if check === 'running'}<p><span class="spin"></span>Compiling and running the tests in a separate copy. You can decide now.</p>
+              {:else if check.status === 'passed'}<p class="ok">Compiles, and the tests pass. {Math.round(check.tookMs / 1000)} s.</p>
+              {:else if check.status === 'failed'}<p class="bad">{check.step === 'tests' ? 'Compiles, but tests fail.' : 'Does not compile.'}</p>{#if check.output}<pre>{check.output}</pre>{/if}
+              {:else}<p>Could not check it. {check.output}</p>{/if}
+            </div>
+          {/if}
+          {#if untouched}
+            <div class="note n-warn float f4 warnc" in:fly|global={{ x: -28, duration: 340, delay: 240, ...ease }} out:fly|global={{ x: -20, duration: 200 }}>
+              <h3>Look twice</h3>
+              <p>The flagged line is unchanged: <code>{flagged}</code></p>
+            </div>
+          {/if}
+        </aside>
+
+        <aside class="right">
+          <div class="note n-msg float f5" in:fly|global={{ x: 28, duration: 340, delay: 150, ...ease }} out:fly|global={{ x: 20, duration: 200 }}>
+            {#if f.proposal.working}
+              <h3>Applies to your changes</h3>
+              <p>This fixes uncommitted work, so it goes into the working tree and is not committed.</p>
+            {:else}
+              <div class="lab"><h3>Commit message</h3><CopyButton text={message} title="Copy the message" /></div>
+              <textarea class="mono" rows="5" bind:value={message} spellcheck="false"></textarea>
+            {/if}
+          </div>
+          <div class="note actions float f6" in:fly|global={{ x: 28, duration: 340, delay: 210, ...ease }} out:fly|global={{ x: 20, duration: 200 }}>
+            {#if rejecting}
+              <h3>Why not? Optional</h3>
+              <textarea rows="3" bind:value={reason} placeholder="e.g. we keep field injection in legacy controllers. Codist remembers this."></textarea>
+              <button class="b3 primary" onclick={reject}>{reason.trim() ? 'Reject and remember' : 'Reject'}</button>
+              <button class="b3 ghost" onclick={() => (rejecting = false)}>Back</button>
+            {:else}
+              <button class="b3 primary" disabled={!!f.busy || (!f.proposal.working && !message.trim())} onclick={() => applyFix(message)}>
+                {f.busy === 'applying' ? 'Applying…' : f.proposal.working ? 'Apply' : 'Apply and commit'}
+              </button>
+              <button class="b3" disabled={f.busy === 'applying'} onclick={() => (rejecting = true)}>Reject…</button>
+              <p class="keys">⌘↵ to {f.proposal.working ? 'apply' : 'commit'} · Esc to discard</p>
+            {/if}
+          </div>
+        </aside>
       {/if}
-      {#if f.error}<div class="err"><p class="error">{f.error}</p><CopyButton text={f.error} title="Copy the error" /></div>{/if}
-      {#if rejecting}
-        <div class="reject">
-          <label class="label" for="fix-why">Why not? Optional</label>
-          <textarea id="fix-why" rows="2" bind:value={reason} placeholder="e.g. we keep field injection in legacy controllers. Codist remembers this in later reviews and fixes."></textarea>
+
+      {#if f.error}
+        <div class="note err float" transition:scale|global={{ start: 0.95, opacity: 0, duration: 260 }}>
+          <div class="lab"><h3>The fix could not be prepared</h3><CopyButton text={f.error} title="Copy the error" /></div>
+          <p>{f.error}</p>
+          <button class="b3" onclick={closeFix}>Close</button>
         </div>
       {/if}
     </div>
-
-    <footer>
-      <span class="faint hint">{f.proposal ? `⌘↵ to ${f.proposal.working ? 'apply' : 'commit'} · Esc to discard` : f.busy === 'generating' ? 'Cancel or Esc stops the model. Clicking outside does nothing.' : ''}</span>
-      {#if f.proposal && rejecting}
-        <button class="btn secondary" onclick={() => (rejecting = false)}>Back</button>
-        <button class="btn" onclick={reject}>{reason.trim() ? 'Reject and remember' : 'Reject'}</button>
-      {:else if f.proposal}
-        <button class="btn secondary" disabled={f.busy === 'applying'} onclick={() => (rejecting = true)}>Reject…</button>
-      {:else}
-        <button class="btn secondary" disabled={f.busy === 'applying'} onclick={closeFix}>{f.busy === 'generating' ? 'Cancel' : 'Close'}</button>
-      {/if}
-      {#if f.proposal && !rejecting}
-        <button class="btn" disabled={!!f.busy || (!f.proposal?.working && !message.trim())} onclick={() => applyFix(message)}>
-          {#if f.busy === 'applying'}<span class="spinner"></span>Applying…{:else if f.proposal?.working}Apply to working tree{:else}Apply & commit{/if}
-        </button>
-      {/if}
-    </footer>
-  </div>
+  {/if}
 {/if}
 
 <style>
-  .check { margin: 0 0 10px; padding: 8px 11px; border-radius: var(--r-md, 8px); font-size: 12.5px; line-height: 1.45; background: var(--surface-2); color: var(--text-2); }
-  .check.passed { color: var(--good); background: color-mix(in srgb, var(--good) 12%, transparent); }
-  .check.failed { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
-  .check pre { margin: 6px 0 0; max-height: 160px; overflow: auto; white-space: pre-wrap; font-size: 11.5px; color: var(--text-2); }
-  .backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.45); }
-  .dialog {
-    position: fixed;
-    z-index: 61;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: min(1120px, calc(100vw - 32px));
-    max-height: calc(100vh - 64px);
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--border-strong);
-    border-radius: 10px;
-    background: var(--surface);
-    box-shadow: var(--shadow);
+  .scrim { position: fixed; inset: 0; z-index: 70; background: rgba(6, 6, 10, 0.84); backdrop-filter: blur(18px) saturate(0.8); -webkit-backdrop-filter: blur(18px) saturate(0.8); }
+  :global([data-theme='light']) .scrim { background: rgba(240, 240, 246, 0.6); }
+  .wait { position: fixed; z-index: 71; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; text-align: center; max-width: 560px; width: calc(100% - 32px); }
+  .wait .kicker { margin: 18px 0 4px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
+  .wait h2 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -0.01em; }
+  .wait .where { margin: 6px 0 14px; font-size: 12px; color: var(--text-3); word-break: break-all; }
+  .progress { margin: 0; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .hint { margin: 4px 0 18px; font-size: 12px; color: var(--text-3); }
+  .wires { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 73; pointer-events: none; overflow: visible; }
+  .wire { fill: none; stroke: rgba(139, 124, 246, 0.75); stroke-width: 1.6; stroke-dasharray: 5 4; filter: drop-shadow(0 0 4px rgba(139, 124, 246, 0.7)); animation: flow 1.2s linear infinite; }
+  .w-warn { stroke: rgba(255, 159, 10, 0.8); }
+  .wires marker path { fill: #8b7cf6; }
+  @keyframes flow { to { stroke-dashoffset: -9; } }
+  .stage { position: fixed; inset: 0; z-index: 72; pointer-events: none; display: grid; overflow: auto;
+    grid-template-columns: minmax(200px, 270px) minmax(0, 820px) minmax(220px, 290px); grid-template-rows: auto auto;
+    justify-content: center; align-content: center; gap: 24px 64px; padding: 28px; }
+  .stage > * { pointer-events: auto; }
+  .title { grid-column: 1 / -1; justify-self: center; position: relative; max-width: 900px; padding: 14px 44px 14px 18px; border-radius: 16px;
+    background: var(--glass-strong); border: 1px solid var(--border); box-shadow: var(--elev-2), var(--glow-soft); }
+  .tag { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11.5px; font-weight: 600; color: #fff; background: var(--accent); box-shadow: var(--glow); }
+  .title h2 { margin: 8px 0 2px; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  .sub { margin: 0; font-size: 11.5px; color: var(--text-3); word-break: break-all; }
+  .x { position: absolute; top: 10px; right: 12px; border: 0; background: none; font-size: 22px; line-height: 1; color: var(--text-3); }
+  .change { grid-column: 2; grid-row: 2; align-self: center; min-width: 0; border-radius: 16px; padding: 10px; background: var(--glass-strong);
+    border: 1px solid rgba(139, 124, 246, 0.35); box-shadow: var(--elev-2), 0 0 90px -24px rgba(139, 124, 246, 0.55); }
+  .diff-head { display: flex; align-items: center; gap: 10px; padding: 2px 4px 10px; }
+  .plus { color: var(--good); } .minus { color: var(--bad); } .grow { flex: 1; }
+  .seg { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--surface-2); }
+  .seg button { border: 0; background: none; height: 24px; padding: 0 10px; border-radius: 7px; font-size: 12px; color: var(--text-3); }
+  .seg button.on { color: var(--text); background: var(--surface-3); box-shadow: inset 0 1px 0 var(--edge), 0 2px 0 rgba(0, 0, 0, 0.4); }
+  .split-head { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3); padding: 0 4px 6px; }
+  .split-diff { display: grid; grid-template-columns: 1fr 1fr; max-height: 52vh; overflow: auto; border-radius: 10px; background: var(--code-bg); border: 1px solid var(--border);
+    font: 12px/1.6 var(--mono, ui-monospace, monospace); }
+  .cell { padding: 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; } /* wrap, never cut: the hidden end may be the fix */
+  .cell.del { background: color-mix(in srgb, var(--bad) 16%, transparent); }
+  .cell.add { background: color-mix(in srgb, var(--good) 16%, transparent); }
+  .cell.none { background: rgba(255, 255, 255, 0.015); }
+  .wide { grid-column: 1 / -1; padding: 3px 10px; color: var(--text-3); background: var(--surface-2); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+  .wide.fileh { color: var(--text); font-weight: 600; }
+  .diff { margin: 0; max-height: 52vh; overflow: auto; padding: 6px 0; border-radius: 10px; background: var(--code-bg); border: 1px solid var(--border); font-size: 12px; line-height: 1.6; }
+  .diff span { display: block; padding: 0 12px; white-space: pre; }
+  .diff .add { background: color-mix(in srgb, var(--good) 16%, transparent); } .diff .del { background: color-mix(in srgb, var(--bad) 16%, transparent); }
+  .diff .hunk, .diff .fileh { color: var(--text-3); background: var(--surface-2); }
+  .left { grid-column: 1; grid-row: 2; align-self: center; display: flex; flex-direction: column; gap: 16px; }
+  .right { grid-column: 3; grid-row: 2; align-self: center; display: flex; flex-direction: column; gap: 16px; }
+  .note { padding: 14px 16px; border-radius: 14px; background: var(--glass-strong); border: 1px solid var(--border); box-shadow: var(--elev-2), 0 0 40px -18px rgba(139, 124, 246, 0.4); }
+  .note h3 { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+  .note p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text-2); }
+  .note p + p { margin-top: 6px; }
+  .rec { color: var(--text) !important; }
+  .note pre { margin: 8px 0 0; max-height: 140px; overflow: auto; font-size: 11px; color: var(--text-2); white-space: pre-wrap; }
+  .ok { color: var(--good) !important; } .bad { color: var(--bad) !important; }
+  .n-check.passed { border-color: color-mix(in srgb, var(--good) 45%, var(--border)); box-shadow: var(--elev-2), 0 0 40px -16px color-mix(in srgb, var(--good) 60%, transparent); }
+  .n-check.failed { border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
+  .warnc { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+  .spin { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; border: 1.5px solid var(--text-3); border-top-color: var(--accent); animation: rot 0.8s linear infinite; vertical-align: -1px; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  .lab { display: flex; align-items: center; justify-content: space-between; }
+  textarea { width: 100%; box-sizing: border-box; margin-top: 4px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--code-bg); color: var(--text); font-size: 12px; resize: vertical; }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .actions { display: flex; flex-direction: column; gap: 8px; }
+  .actions .b3 { justify-content: center; }
+  .actions .b3:disabled { opacity: 0.45; cursor: not-allowed; }
+  .keys { margin: 2px 0 0 !important; font-size: 11px !important; color: var(--text-3) !important; text-align: center; }
+  .err { grid-column: 2; grid-row: 2; align-self: center; border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
+  .float { animation: bob 8s ease-in-out infinite; }
+  .f2 { animation-duration: 8.5s; animation-delay: -2s; } .f3 { animation-duration: 9.5s; animation-delay: -4s; } .f4 { animation-duration: 7.5s; animation-delay: -1s; }
+  .f5 { animation-duration: 9s; animation-delay: -3s; } .f6 { animation-duration: 10s; animation-delay: -5s; } .f1 { animation-duration: 11s; }
+  @keyframes bob { 50% { transform: translateY(-5px); } }
+  @media (prefers-reduced-motion: reduce) { .float, .wire, .spin { animation: none; } }
+  @media (max-width: 1150px) {
+    .stage { grid-template-columns: minmax(0, 1fr); align-content: start; }
+    .change, .left, .right, .err { grid-column: 1; grid-row: auto; }
   }
-  header { display: flex; justify-content: space-between; gap: 12px; padding: 14px 16px 12px; border-bottom: 1px solid var(--border); }
-  h2 { margin: 0; font-size: 14px; font-weight: 600; }
-  .sub { margin-top: 2px; font-size: 11.5px; color: var(--text-3); }
-  .body { padding: 14px 16px; overflow: auto; min-height: 0; }
-  .state { display: flex; align-items: center; gap: 10px; padding: 24px 0; color: var(--text-2); }
-  .why { margin-bottom: 12px; padding: 9px 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--r); background: var(--surface-2); }
-  .why p { margin: 4px 0 0; color: var(--text-2); }
-  .why .rec b { color: var(--text); font-weight: 600; }
-  .warn { margin: 0 0 12px; padding: 8px 12px; border-radius: var(--r); color: var(--text); background: color-mix(in srgb, var(--warn) 13%, transparent); font-size: 12.5px; }
-  .warn b { color: var(--warn); font-weight: 600; }
-  .warn code { font: 11.5px var(--mono); overflow-wrap: anywhere; }
-  .grow { flex: 1; }
-  .seg { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2); }
-  .seg button { height: 20px; padding: 0 8px; border: 0; border-radius: 3px; background: none; font-size: 11px; color: var(--text-3); }
-  .seg button.on { color: var(--text); background: var(--surface-3); }
-  .split-head { display: grid; grid-template-columns: 1fr 1fr; font-size: 11px; font-weight: 600; color: var(--text-2); padding: 0 12px 3px; }
-  .split-diff { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin: 0 0 14px; max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--r); background: var(--code-bg); font: 12px/1.55 var(--mono); }
-  .cell { padding: 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
-  .cell + .cell { border-left: 1px solid var(--border); }
-  .cell.none { background: var(--surface-2); }
-  .wide { grid-column: 1 / -1; padding: 0 10px; }
-  .wide.fileh { padding-top: 3px; }
-  .lab { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-  .lab label { margin: 0; }
-  .err { display: flex; align-items: flex-start; gap: 6px; }
-  .err .error { flex: 1; }
-  .reject { margin-top: 12px; }
-  .diff-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
-  .plus { color: var(--added); font-size: 12px; }
-  .minus { color: var(--bad); font-size: 12px; }
-  .diff {
-    margin: 0 0 14px;
-    max-height: 46vh;
-    overflow: auto;
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    background: var(--code-bg);
-    font: 12px/1.55 var(--mono);
-    padding: 4px 0;
-  }
-  .diff span { display: block; padding: 0 12px; white-space: pre; min-width: max-content; }
-  .add { background: color-mix(in srgb, var(--added) 14%, transparent); }
-  .del { background: color-mix(in srgb, var(--bad) 13%, transparent); }
-  .hunk { color: var(--accent-text); background: var(--accent-soft); }
-  .fileh { font-weight: 600; color: var(--text); background: var(--surface-3); border-top: 1px solid var(--border); padding-top: 3px !important; }
-  label { display: block; margin-bottom: 6px; }
-  textarea {
-    width: 100%;
-    resize: vertical;
-    padding: 8px 10px;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--r);
-    background: var(--surface-2);
-    color: var(--text);
-    font-size: 12px;
-    line-height: 1.5;
-  }
-  textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-  .error { margin: 10px 0 0; color: var(--bad); }
-  footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
-  .hint { margin-right: auto; font-size: 11.5px; }
-  .btn:disabled { opacity: 0.55; cursor: default; filter: none; }
 </style>

@@ -134,7 +134,7 @@
 {/if}
 
 <style>
-  .scrim { position: fixed; inset: 0; z-index: 60; background: rgba(6, 6, 10, 0.68); backdrop-filter: blur(18px) saturate(0.8); -webkit-backdrop-filter: blur(18px) saturate(0.8); }
+  .scrim { position: fixed; inset: 0; z-index: 60; background: rgba(6, 6, 10, 0.82); backdrop-filter: blur(18px) saturate(0.8); -webkit-backdrop-filter: blur(18px) saturate(0.8); }
   :global([data-theme='light']) .scrim { background: rgba(240, 240, 246, 0.6); }
   .wires { --c: var(--sev-medium); position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 63; pointer-events: none; overflow: visible; }
   .wire { fill: none; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c) 80%, transparent)); stroke: color-mix(in srgb, var(--c) 75%, transparent); stroke-width: 1.6; stroke-dasharray: 5 4; animation: flow 1.2s linear infinite; }
