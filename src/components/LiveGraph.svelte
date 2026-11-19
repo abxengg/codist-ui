@@ -224,13 +224,21 @@
       n.vx -= n.x * gravity * dt; n.vy -= n.y * gravity * dt; n.vz -= n.z * gravity * dt;
       if (three && mods.length > 1) { const a = anchor(n.m); n.vx += (a.x - n.x) * 0.06 * dt; n.vy += (a.y - n.y) * 0.06 * dt; n.vz += (a.z - n.z) * 0.06 * dt; }
       if (f.group && mods.length > 1) { const c = cs[n.m], p = push[n.m]; n.vx += ((c.x - n.x) * 0.5 + p.x) * dt; n.vy += ((c.y - n.y) * 0.5 + p.y) * dt; n.vz += ((c.z - n.z) * 0.5 + p.z) * dt; }
-      if (f.drift) { n.vx += Math.sin(t * 0.4 + n.r * 7 + n.x * 0.01) * 0.8 * dt; n.vy += Math.cos(t * 0.37 + n.r * 5 + n.y * 0.01) * 0.8 * dt; }
+      if (f.drift) { n.vx += Math.sin(t * 0.4 + n.r * 7) * 0.5 * dt; n.vy += Math.cos(t * 0.37 + n.r * 5) * 0.5 * dt; }
       if (n.pinned) { n.vx = 0; n.vy = 0; n.vz = 0; continue; }
       n.vx *= 0.82; n.vy *= 0.82; n.vz *= 0.82;
       n.x += n.vx * dt * 10 * heat; n.y += n.vy * dt * 10 * heat;
       n.z = three ? n.z + n.vz * dt * 10 * heat : 0;
     }
-    heat = Math.max(0.3, heat * 0.996);
+    // Keep the whole graph centred: whatever drifts, the middle stays in the middle.
+    if (nodes.length) {
+      let mx = 0, my = 0, mz = 0;
+      for (const n of nodes) { mx += n.x; my += n.y; mz += n.z; }
+      mx /= nodes.length; my /= nodes.length; mz /= nodes.length;
+      for (const n of nodes) { n.x -= mx * 0.1; n.y -= my * 0.1; if (three) n.z -= mz * 0.1; }
+    }
+    // Settle to a calm drift rather than moving at full strength for ever.
+    heat = Math.max(0.12, heat * 0.994);
   }
 
   function frameAll() {
@@ -347,6 +355,12 @@
       if (!reduce) step(dt, t);
       // In 3D the graph turns slowly by itself until you take hold of it.
       idle = drag || hover ? 0 : idle + dt;
+      // Out of view while nobody is touching it: glide back to frame it.
+      if (idle > 4 && follow <= 0 && !picked && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) {
+        let out = false;
+        for (const n of nodes) if (n.px < 10 || n.py < 70 || n.px > W - 10 || n.py > H - 40) { out = true; break; }
+        if (out) follow = 1.2;
+      }
       if (f.three && !reduce && idle > 1.5) cam.yaw += dt * 0.08;
       if (follow > 0) {
         follow -= dt;
