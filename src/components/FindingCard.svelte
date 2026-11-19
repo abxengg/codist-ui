@@ -10,8 +10,9 @@
   import { ago, NOT_FIXABLE } from '../lib/theme';
 
   // `members` are every place of the same issue (root first); a single finding is an issue of one.
-  let { f, members = [f], showPath = true }: { f: FindingWithPath; members?: FindingWithPath[]; showPath?: boolean } = $props();
-  let expanded = $state(false);
+  let { f, members = [f], showPath = true, open: startOpen = false }: { f: FindingWithPath; members?: FindingWithPath[]; showPath?: boolean; open?: boolean } = $props();
+  // In the diff a finding starts open: what is wrong and why should be readable without a click.
+  let expanded = $state(startOpen);
 
   const files = $derived([...new Set(members.map((m) => m.path))]);
   // Prefer a rule's explanation and fix over the model's: they are precise and what Fix applies.
@@ -58,19 +59,7 @@
   {#if expanded}
     <div class="body" transition:accordion>
       {#if f.doubt}<p class="muted">To judge: {f.doubt}</p>{/if}
-      {#if steps.length}
-        <div class="how">
-          <span class="howlabel">How Codist decided</span>
-          <ol>
-            {#each steps as s, i (i)}
-              <li class:good={/^(passed|kept|confirmed|sided with the claim)$/.test(s.result)} class:bad={/refuted|contradicted|demoted|note|sided with the code|without proof|guessing|could not/.test(s.result)}>
-                <b>{s.step}</b> <span class="res">{s.result}</span>{#if s.detail}<span class="faint"> · {s.detail}</span>{/if}
-              </li>
-            {/each}
-          </ol>
-        </div>
-      {/if}
-      {#if lead.detail}<p>{lead.detail}</p>{/if}
+      {#if lead.detail}<div class="what"><span class="howlabel">What is wrong</span><p>{lead.detail}</p></div>{/if}
       {#if many}
         <ul class="locs">
           {#each members as m, i (i)}
@@ -84,7 +73,19 @@
           {/each}
         </ul>
       {/if}
-      {#if lead.suggestion}<CodeBlock code={lead.suggestion} />{/if}
+      {#if lead.suggestion}<span class="howlabel">Suggested change</span><CodeBlock code={lead.suggestion} />{/if}
+      {#if steps.length}
+        <div class="how">
+          <span class="howlabel">How Codist decided</span>
+          <ol>
+            {#each steps as s, i (i)}
+              <li class:good={/^(passed|kept|confirmed|sided with the claim)$/.test(s.result)} class:bad={/refuted|contradicted|demoted|note|sided with the code|without proof|guessing|could not/.test(s.result)}>
+                <b>{s.step}</b> <span class="res">{s.result}</span>{#if s.detail}<span class="faint"> · {s.detail}</span>{/if}
+              </li>
+            {/each}
+          </ol>
+        </div>
+      {/if}
       <div class="actions">
         {#if f.ignored}
           <span class="faint">{f.feedback === 'wrong' ? 'Marked wrong: set aside and not reported again.' : 'Set aside.'}</span>
@@ -161,4 +162,5 @@
   .how li .res { color: var(--text-2); }
   .how li.good .res { color: var(--good); }
   .how li.bad .res { color: var(--warn); }
+  .what p { margin: 4px 0 10px; font-size: 13px; line-height: 1.55; color: var(--text); }
 </style>

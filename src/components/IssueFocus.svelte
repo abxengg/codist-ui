@@ -3,7 +3,7 @@
   // it: what is wrong and why, the suggestion, where it came from, and what you can do. Esc or a click outside closes.
   import { fade, fly, scale } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
-  import { app, api_feedback, issueAction, proposeFix, selectCommit } from '../lib/store.svelte';
+  import { app, api_feedback, issueAction, openFile, proposeFix, selectCommit } from '../lib/store.svelte';
   import { ago, INSTANT_REFS } from '../lib/theme';
   import CodePeek from './CodePeek.svelte';
   import type { FindingWithPath, FixRef, Issue } from '../lib/types';
@@ -119,6 +119,7 @@
           {#if !canFix}<p class="why-not">{whyNot}</p>{/if}
           <button class="b3" onclick={() => act('fixed')}>Mark fixed</button>
           <button class="b3" onclick={openCommit}>Open the commit</button>
+          <button class="b3" onclick={() => { const it = i; if (!it) return; close(); void openFile(it.path, null, it.line); }}>Open the whole file</button>
           {#if i.source === 'llm'}
             <div class="judge">
               <button class="b3 ghost" class:on={judged === 'useful'} onclick={() => { judged = 'useful'; void api_feedback(i.id, 'useful'); }}>Useful</button>

@@ -4,7 +4,7 @@
   // what it is. Click opens its details: what it uses, what uses it, its methods with their cost, its endpoints and
   // its open issues. Colour by kind, by service or by issues. In 3D the graph floats in space and can be turned.
   import { onMount, untrack } from 'svelte';
-  import { app } from '../lib/store.svelte';
+  import { app, openFile } from '../lib/store.svelte';
   import { live } from '../lib/live.svelte';
   import { groups } from '../lib/groups';
   import { STEREOTYPE } from '../lib/theme';
@@ -649,7 +649,7 @@
       {/if}
       <h3>File</h3>
       <dl class="meta">
-        <dt>Path</dt><dd class="mono">{picked.g.file}</dd>
+        <dt>Path</dt><dd class="mono">{picked.g.file} <button class="openf" onclick={() => picked && openFile(picked.g.file, null, picked.g.startLine)}>Open</button></dd>
         <dt>Lines</dt><dd>{picked.g.startLine}–{picked.g.endLine} ({picked.lines})</dd>
         <dt>Members</dt><dd>{details.methods.filter((m) => m.kind === 'method').length} methods · {details.methods.filter((m) => m.kind === 'constructor').length} constructors · {details.fields} fields</dd>
         {#if picked.g.annotations.length}<dt>Annotations</dt><dd class="mono">{picked.g.annotations.map((a) => '@' + a.replace(/^@/, '')).join('  ')}</dd>{/if}
@@ -737,4 +737,5 @@
   .meta { display: grid; grid-template-columns: 92px 1fr; gap: 6px 10px; margin: 0; font-size: 12px; }
   .meta dt { color: var(--text-3); } .meta dd { margin: 0; color: var(--text-2); word-break: break-word; }
   .tags .kind { color: var(--text); font-weight: 600; }
+  .openf { margin-left: 6px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 6px; padding: 0 7px; font: 11px var(--font); color: var(--accent-text); }
 </style>

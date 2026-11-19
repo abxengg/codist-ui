@@ -159,7 +159,7 @@
         </div>
         {#if !isClosed(f.path)}
           {#each here.filter((g) => !inDiff(g)) as g (g[0].title + g[0].line)}
-            <div class="note" class:active={isActive(g)} id={`issue-${g[0].path}-${g[0].line}`}><FindingCard f={g[0]} members={g} showPath={false} /></div>
+            <div class="note" class:active={isActive(g)} id={`issue-${g[0].path}-${g[0].line}`}><FindingCard f={g[0]} members={g} showPath={false} open={!isNote(g)} /></div>
           {/each}
           {#if f.binary}
             <p class="faint pad">Binary file, so there are no lines to show.</p>
@@ -171,7 +171,7 @@
                 {:else}
                   <div class="row {r.kind}"><span class="no">{r.old ?? ''}</span><span class="no">{r.now ?? ''}</span><code>{#if colours[f.path]?.[i]}{#each colours[f.path][i] as t}<span style:color={t.color}>{t.content}</span>{/each}{:else}{r.text || ' '}{/if}</code></div>
                   {#each r.now ? here.filter((g) => g[0].line === r.now) : [] as g (g[0].title + g[0].line)}
-                    <div class="note {worstOf(g)}" class:active={isActive(g)} id={`issue-${g[0].path}-${g[0].line}`}><FindingCard f={g[0]} members={g} showPath={false} /></div>
+                    <div class="note {worstOf(g)}" class:active={isActive(g)} id={`issue-${g[0].path}-${g[0].line}`}><FindingCard f={g[0]} members={g} showPath={false} open={!isNote(g)} /></div>
                   {/each}
                 {/if}
               {/each}
