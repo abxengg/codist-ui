@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Commits as a timeline of light down the middle of the page: each commit a node on it, coloured by what its review
-  // found, its card on alternating sides, grouped by day. Clicking a commit puts it on the stage (CommitStage), where
+  // Commits as a compact list, one row per commit, grouped by day: a dot coloured by what its review found, the
+  // message, who, the id, issue and AI tags, and when. Clicking a commit puts it on the stage (CommitStage), where
   // its changes, issues and fixes float together and ← → walk the history.
   import { app, selectCommit } from '../lib/store.svelte';
   import { ago } from '../lib/theme';
@@ -60,27 +60,27 @@
     </div>
   </header>
 
-  <div class="track">
-    <div class="spine" aria-hidden="true"></div>
+  <div class="list">
     {#each days as g (g.day)}
-      <p class="day"><span>{g.day}</span></p>
-      {#each g.items as { c, n } (c.commit.sha)}
-        {@const k = issuesIn(c)}
-        <button id="c-{c.commit.sha}" class="node {tone(c)} {n % 2 ? 'r' : 'l'}" class:on={c.commit.sha === app.selectedSha} onclick={() => openCommit(c.commit.sha)}>
-          <span class="pin" title={STATUS[c.status ?? 'queued']}></span>
-          <span class="stem"></span>
-          <span class="card">
-            <span class="msg">{c.commit.message}</span>
-            <span class="meta"><i class="av">{initials(c.commit.author)}</i>{c.commit.author} · {ago(c.commit.time)} · <span class="mono">{c.commit.shortSha}</span></span>
+      <p class="day">{g.day}</p>
+      <div class="group">
+        {#each g.items as { c } (c.commit.sha)}
+          {@const k = issuesIn(c)}
+          <button id="c-{c.commit.sha}" class="row {tone(c)}" class:on={c.commit.sha === app.selectedSha} onclick={() => openCommit(c.commit.sha)}>
+            <span class="dot" title={STATUS[c.status ?? 'queued']}></span>
+            <span class="msg" title={c.commit.message}>{c.commit.message}</span>
+            <span class="who"><i class="av">{initials(c.commit.author)}</i><span>{c.commit.author}</span></span>
+            <span class="sha mono">{c.commit.shortSha}</span>
             <span class="tags">
               {#if k}<i class="ui-pill cnt">{k} issue{k === 1 ? '' : 's'}</i>{:else if c.status === 'done'}<i class="ui-pill good">clean</i>{/if}
-              {#if c.model}<i class="ui-pill ai">AI read</i>{/if}
+              {#if c.model}<i class="ui-pill ai">AI</i>{/if}
               {#if c.status === 'running' || c.status === 'queued'}<i class="ui-pill">{STATUS[c.status]}</i>{/if}
               {#if c.risk === 'high'}<i class="ui-pill warn">risky</i>{/if}
             </span>
-          </span>
-        </button>
-      {/each}
+            <span class="time">{ago(c.commit.time)}</span>
+          </button>
+        {/each}
+      </div>
     {:else}
       <p class="empty">{q ? 'No commit matches.' : 'No commits yet.'}</p>
     {/each}
@@ -107,38 +107,32 @@
   .seg button.on { background: var(--surface-3); color: var(--text); box-shadow: inset 0 1px 0 var(--edge); }
   .seg button:disabled { opacity: 0.4; }
 
-  /* The spine down the middle, cards on alternating sides. */
-  .track { position: relative; z-index: 1; max-width: 980px; margin: 0 auto; padding: 8px 32px 80px; }
-  .spine { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; border-radius: 2px;
-    background: linear-gradient(rgba(139, 124, 246, 0.55), rgba(139, 124, 246, 0.12)); box-shadow: 0 0 14px rgba(139, 124, 246, 0.35); }
-  .day { position: relative; display: flex; justify-content: center; margin: 22px 0 12px; }
-  .day span { padding: 3px 12px; border-radius: 99px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2);
-    background: var(--surface-2); border: 1px solid var(--border); box-shadow: var(--elev-1); }
-  .node { --c: var(--good); position: relative; display: block; width: 50%; margin: 0 0 6px; padding: 0; border: 0; background: none; text-align: left; color: inherit; }
-  .node.l { padding-right: 34px; } .node.r { margin-left: 50%; padding-left: 34px; }
-  .node.warn { --c: var(--sev-high); } .node.bad { --c: var(--bad); } .node.busy { --c: var(--accent); }
-  .pin { position: absolute; top: 20px; width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 4px var(--bg), 0 0 14px var(--c); z-index: 1; }
-  .node.l .pin { right: -6px; } .node.r .pin { left: -6px; }
-  .stem { position: absolute; top: 25px; width: 28px; height: 2px; background: color-mix(in srgb, var(--c) 45%, transparent); }
-  .node.l .stem { right: 6px; } .node.r .stem { left: 6px; }
-  .node.busy .pin { animation: beat 1.3s ease-in-out infinite; }
-  @keyframes beat { 50% { transform: scale(1.4); } }
-  .card { display: flex; flex-direction: column; gap: 6px; padding: 12px 15px; border-radius: 14px; background: var(--glass); border: 1px solid var(--border);
-    box-shadow: var(--elev-1); transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s; }
-  .node:hover .card { transform: translateY(-2px); box-shadow: var(--elev-2), 0 0 34px -16px color-mix(in srgb, var(--c) 70%, transparent); border-color: var(--border-strong); }
-  .node.on .card { border-color: color-mix(in srgb, var(--c) 55%, var(--border)); box-shadow: var(--elev-2), 0 0 34px -12px color-mix(in srgb, var(--c) 60%, transparent); }
-  .msg { font-size: 13.5px; font-weight: 500; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .meta { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-3); overflow: hidden; white-space: nowrap; }
-  .av { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font: 600 9px var(--font); font-style: normal; color: #fff; background: var(--surface-3); box-shadow: inset 0 1px 0 var(--edge); }
-  .tags { display: flex; flex-wrap: wrap; gap: 5px; }
-  .tags:empty { display: none; }
+  /* One row per commit, grouped by day, inside one floating panel per day. */
+  .list { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 32px 80px; }
+  .day { margin: 18px 4px 8px; }
+  .day { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-3); }
+  .group { border-radius: 16px; background: var(--glass); border: 1px solid var(--border); box-shadow: var(--elev-1); overflow: hidden; }
+  .row { --c: var(--good); display: grid; grid-template-columns: 10px minmax(0, 1fr) 150px 74px 150px 60px; align-items: center; gap: 14px;
+    width: 100%; height: 46px; padding: 0 16px; border: 0; border-top: 1px solid var(--border); background: none; color: inherit; text-align: left; transition: background 0.12s; }
+  .row:first-child { border-top: 0; }
+  .row.warn { --c: var(--sev-high); } .row.bad { --c: var(--bad); } .row.busy { --c: var(--accent); }
+  .row:hover { background: var(--surface-2); }
+  .row.on { background: color-mix(in srgb, var(--c) 9%, transparent); box-shadow: inset 3px 0 0 var(--c); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px color-mix(in srgb, var(--c) 70%, transparent); }
+  .row.busy .dot { animation: beat 1.3s ease-in-out infinite; }
+  @keyframes beat { 50% { transform: scale(1.5); } }
+  .msg { font-size: 13.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .who { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12.5px; color: var(--text-2); }
+  .who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .av { flex-shrink: 0; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; font: 600 9px var(--font); font-style: normal; color: #fff; background: var(--surface-3); box-shadow: inset 0 1px 0 var(--edge); }
+  .sha { font-size: 12px; color: var(--text-3); }
+  .tags { display: flex; gap: 5px; overflow: hidden; }
   .tags i { font-style: normal; }
   .cnt { color: #1b1206; background: var(--sev-high); }
-  .empty { position: relative; text-align: center; color: var(--text-3); padding: 40px; }
-  @media (max-width: 860px) {
-    .spine { left: 40px; }
-    .node, .node.r { width: 100%; margin-left: 0; padding: 0 0 0 40px; }
-    .node.l .pin, .node.r .pin { left: 2px; right: auto; } .node.l .stem, .node.r .stem { left: 14px; right: auto; width: 22px; }
-    .day { justify-content: flex-start; padding-left: 0; }
+  .time { font-size: 12px; color: var(--text-3); text-align: right; font-variant-numeric: tabular-nums; }
+  .empty { text-align: center; color: var(--text-3); padding: 40px; }
+  @media (max-width: 900px) {
+    .row { grid-template-columns: 10px minmax(0, 1fr) auto 50px; }
+    .who, .sha { display: none; }
   }
 </style>
