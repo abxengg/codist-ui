@@ -167,9 +167,11 @@
   // One step of the simulation: repulsion between nearby dots (through a grid), springs along links (weaker for very
   // connected classes, as in d3), a pull to the middle, a pull to each service's middle, and services kept apart.
   // In 3D each service gets a spot spread over a sphere, so the graph has depth instead of lying in one plane.
+  // The toolbar covers the top of the map and the legend its bottom, so the graph is framed and centred in what is left.
+  const TOP = 96, BOT = 64;
   function anchor(m: number) {
     const M = Math.max(1, mods.length), y = M === 1 ? 0 : 1 - (2 * (m + 0.5)) / M, r = Math.sqrt(1 - y * y), a = m * 2.399963;
-    const R = 140 + Math.sqrt(nodes.length) * 14;
+    const R = 190 + Math.sqrt(nodes.length) * 22; // far enough apart that services do not overlap when turned
     return { x: Math.cos(a) * r * R, y: y * R, z: Math.sin(a) * r * R };
   }
   function step(dt: number, t: number) {
@@ -195,7 +197,7 @@
           if (d2 > cell * cell) continue;
           let p = (repel / d2) * dt;
           const touch = (n.r + o.r) * 1.6; // big dots keep clear of each other
-          if (d2 < touch * touch) p += ((touch - Math.sqrt(d2)) / Math.sqrt(d2)) * 1.5 * dt;
+          if (d2 < touch * touch) p += ((touch - Math.sqrt(d2)) / Math.sqrt(d2)) * (n.r + o.r > 14 ? 5 : 1.5) * dt;
           n.vx += dx * p; n.vy += dy * p; n.vz += dz * p;
         }
       }
@@ -222,7 +224,7 @@
     }
     for (const n of nodes) {
       n.vx -= n.x * gravity * dt; n.vy -= n.y * gravity * dt; n.vz -= n.z * gravity * dt;
-      if (three && mods.length > 1) { const a = anchor(n.m); n.vx += (a.x - n.x) * 0.06 * dt; n.vy += (a.y - n.y) * 0.06 * dt; n.vz += (a.z - n.z) * 0.06 * dt; }
+      if (three && mods.length > 1) { const a = anchor(n.m); n.vx += (a.x - n.x) * 0.1 * dt; n.vy += (a.y - n.y) * 0.1 * dt; n.vz += (a.z - n.z) * 0.1 * dt; }
       if (f.group && mods.length > 1) { const c = cs[n.m], p = push[n.m]; n.vx += ((c.x - n.x) * 0.5 + p.x) * dt; n.vy += ((c.y - n.y) * 0.5 + p.y) * dt; n.vz += ((c.z - n.z) * 0.5 + p.z) * dt; }
       if (f.drift) { n.vx += Math.sin(t * 0.4 + n.r * 7) * 0.5 * dt; n.vy += Math.cos(t * 0.37 + n.r * 5) * 0.5 * dt; }
       if (n.pinned) { n.vx = 0; n.vy = 0; n.vz = 0; continue; }
@@ -247,12 +249,12 @@
       // In 3D the graph can turn any way, so frame the sphere that holds it.
       let R = 1;
       for (const n of nodes) R = Math.max(R, Math.hypot(n.x, n.y, n.z));
-      return { x: 0, y: 0, k: Math.min(2.2, (Math.min(wrap.clientWidth, wrap.clientHeight) - 120) / (2 * R * 1.08)) };
+      return { x: 0, y: 0, k: Math.min(2.2, (Math.min(wrap.clientWidth - 80, wrap.clientHeight - TOP - BOT - 40)) / (2 * R * 1.08)) };
     }
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
     for (const n of nodes) { x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x); y0 = Math.min(y0, n.y); y1 = Math.max(y1, n.y); }
     const w = Math.max(200, x1 - x0 + 140), h = Math.max(200, y1 - y0 + 220);
-    return { x: -(x0 + x1) / 2, y: -(y0 + y1) / 2, k: Math.min(2.2, Math.min(wrap.clientWidth / w, wrap.clientHeight / h)) };
+    return { x: -(x0 + x1) / 2, y: -(y0 + y1) / 2, k: Math.min(2.2, Math.min(wrap.clientWidth / w, (wrap.clientHeight - TOP - BOT) / h)) };
   }
   function fit(snap = false) {
     const t = frameAll();
@@ -286,15 +288,17 @@
     fit(true);
 
     // Where a node is on screen: in 2D a plain zoom and pan; in 3D a turn by yaw and pitch, then perspective.
+    const cy0 = () => (H + TOP - BOT) / 2;
     const project = () => {
+      const CY = cy0();
       const cyw = Math.cos(cam.yaw), syw = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
       for (const n of nodes) {
-        if (!f.three) { n.px = W / 2 + (n.x + cam.x) * cam.k; n.py = H / 2 + (n.y + cam.y) * cam.k; n.pz = 0; n.ps = 1; continue; }
+        if (!f.three) { n.px = W / 2 + (n.x + cam.x) * cam.k; n.py = CY + (n.y + cam.y) * cam.k; n.pz = 0; n.ps = 1; continue; }
         const x = n.x, y = n.y, z = n.z;
         const x1 = x * cyw - z * syw, z1 = x * syw + z * cyw;
         const y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
         const p = 1800 / (1800 + z2);
-        n.px = W / 2 + x1 * cam.k * p; n.py = H / 2 + y2 * cam.k * p; n.pz = z2; n.ps = Math.max(0.2, p);
+        n.px = W / 2 + x1 * cam.k * p; n.py = CY + y2 * cam.k * p; n.pz = z2; n.ps = Math.max(0.2, p);
       }
     };
     const hit = (sx: number, sy: number) => {
@@ -319,7 +323,7 @@
       if (!drag) { hover = hit(e.offsetX, e.offsetY); canvas!.style.cursor = hover ? 'pointer' : f.three ? 'grab' : 'default'; return; }
       const dx = e.offsetX - drag.sx, dy = e.offsetY - drag.sy;
       if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
-      if (drag.n) { drag.n.x = (e.offsetX - W / 2) / cam.k - cam.x; drag.n.y = (e.offsetY - H / 2) / cam.k - cam.y; heat = 1; }
+      if (drag.n) { drag.n.x = (e.offsetX - W / 2) / cam.k - cam.x; drag.n.y = (e.offsetY - cy0()) / cam.k - cam.y; heat = 1; }
       else if (f.three) { cam.yaw = drag.yaw + dx * 0.006; cam.pitch = Math.max(-1.3, Math.min(1.3, drag.pitch + dy * 0.006)); canvas!.style.cursor = 'grabbing'; }
       else { cam.x = drag.cx + dx / cam.k; cam.y = drag.cy + dy / cam.k; canvas!.style.cursor = 'grabbing'; }
     });
@@ -335,7 +339,7 @@
       follow = 0;
       const k0 = cam.k;
       cam.k = Math.min(6, Math.max(0.08, cam.k * Math.exp(-e.deltaY * 0.0015)));
-      if (!f.three) { const s = 1 / cam.k - 1 / k0; cam.x += (e.offsetX - W / 2) * s; cam.y += (e.offsetY - H / 2) * s; }
+      if (!f.three) { const s = 1 / cam.k - 1 / k0; cam.x += (e.offsetX - W / 2) * s; cam.y += (e.offsetY - cy0()) * s; }
     }, { passive: false });
 
     // A dot's shape says what type it is: class a disc, interface a ring, record a rounded square, enum a diamond.
@@ -384,7 +388,7 @@
       for (const e of edges) {
         const on = litNode && (e.a === litNode || e.b === litNode);
         const style = LINK[e.kind] ?? LINK.uses;
-        const base = (e.same ? 0.3 : 0.16) * Math.min(depthA(e.a), depthA(e.b)) * Math.min(dim(e.a), dim(e.b));
+        const base = (e.same ? 0.3 : 0.07) * Math.min(depthA(e.a), depthA(e.b)) * Math.min(dim(e.a), dim(e.b));
         const a = on ? 0.4 + 0.55 * lit : base * (1 - 0.75 * lit);
         if (a < 0.015) continue;
         // A link to a class with open issues takes the issue's colour; otherwise its kind's, or plain grey.
@@ -409,7 +413,7 @@
       // Dots, far first.
       const draw = f.three ? [...nodes].sort((a, b) => b.pz - a.pz) : nodes;
       const reading = live.call?.status === 'running' && live.call.path ? byFile.get(live.call.path) ?? null : null;
-      const halo = nodes.length <= 1500;
+      const halo = !f.three && (nodes.length <= 1500);
       for (const n of draw) {
         const on = n === litNode, nb = near.has(n);
         const fade = (reach ? (reach.has(n) || n === picked ? 1 : 0.12) : litNode && !on && !nb ? 1 - 0.8 * lit : 1) * depthA(n) * dim(n);
@@ -475,11 +479,24 @@
         const cs = mods.map(() => ({ x: 0, y: 0, n: 0, top: Infinity }));
         for (const n of nodes) { const c = cs[n.m]; c.x += n.px; c.y += n.py; c.n++; c.top = Math.min(c.top, n.py); }
         ctx.font = `500 12px ${fam}`;
+        const placed: { x: number; y: number; w: number }[] = [];
         mods.forEach((m, i) => {
           const c = cs[i];
           if (!c.n) return;
-          ctx.fillStyle = f.colour === 'service' ? SERVICE_COL[i % SERVICE_COL.length] : dark ? `rgba(200,200,212,${0.7 * (1 - lit * 0.6)})` : 'rgba(60,60,80,0.75)';
-          ctx.fillText(m, c.x / c.n, c.top - 14);
+          // A small pill, so the name reads over dots and links, and never under the toolbar.
+          const x = c.x / c.n, w = ctx.measureText(m).width + 18;
+          let y = Math.max(TOP + 14, c.top - 16);
+          // Two names never sit on top of each other: a later one moves down until it is clear.
+          for (let tries = 0; tries < 6 && placed.some((p) => Math.abs(p.x - x) < (p.w + w) / 2 + 4 && Math.abs(p.y - y) < 24); tries++) y += 24;
+          placed.push({ x, y, w });
+          ctx.globalAlpha = 1 - lit * 0.6;
+          ctx.fillStyle = dark ? 'rgba(18,18,26,0.82)' : 'rgba(255,255,255,0.9)';
+          ctx.strokeStyle = f.colour === 'service' ? SERVICE_COL[i % SERVICE_COL.length] : dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.roundRect(x - w / 2, y - 15, w, 21, 10.5); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = f.colour === 'service' ? SERVICE_COL[i % SERVICE_COL.length] : dark ? 'rgba(222,222,232,0.95)' : 'rgba(40,40,56,0.95)';
+          ctx.fillText(m, x, y);
+          ctx.globalAlpha = 1;
         });
       }
       raf = requestAnimationFrame(frame);
@@ -698,7 +715,8 @@
   .forces input[type='range'] { width: 100%; accent-color: var(--accent); }
   .forces .tog { flex-direction: row; align-items: center; gap: 8px; }
   .reset { align-self: flex-start; border: 0; background: none; padding: 0; color: var(--text-3); font-size: 12px; }
-  .legend { position: absolute; left: 14px; right: 14px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 11.5px; color: var(--text-3); }
+  .legend { position: absolute; left: 14px; right: 14px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 11.5px; color: var(--text-3);
+    padding: 8px 14px; border-radius: 12px; background: var(--glass-strong); border: 1px solid var(--border); box-shadow: var(--elev-1); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
   .legend button, .legend span { display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; color: inherit; font-size: inherit; }
   .legend button:hover { color: var(--text); } .legend button.off { opacity: 0.35; text-decoration: line-through; }
   .legend i { width: 8px; height: 8px; border-radius: 50%; }
