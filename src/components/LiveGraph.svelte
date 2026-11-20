@@ -32,7 +32,7 @@
   };
 
   const DEFAULTS = { center: 0.5, repel: 0.6, link: 0.5, distance: 0.45, group: true, size: 1, text: 0.55, tests: false, drift: true,
-    three: false, colour: 'plain' as 'plain' | 'kind' | 'service' | 'issues', issuesOnly: false, hidden: [] as string[], orphans: true, linkColour: true, only: '' as string, sizeBy: 'links' as 'links' | 'lines' | 'members' | 'in' | 'out', meta: true };
+    three: false, hex: false, colour: 'plain' as 'plain' | 'kind' | 'service' | 'issues', issuesOnly: false, hidden: [] as string[], orphans: true, linkColour: true, only: '' as string, sizeBy: 'links' as 'links' | 'lines' | 'members' | 'in' | 'out', meta: true };
   let f = $state({ ...DEFAULTS, ...load() });
   function load() { try { return JSON.parse(localStorage.getItem('codist.mapForces') ?? '{}'); } catch { return {}; } }
   $effect(() => { const v = JSON.stringify(f); try { localStorage.setItem('codist.mapForces', v); } catch { /* storage blocked */ } });
@@ -140,6 +140,17 @@
     for (const g of gr.nodes) if (f.tests || g.stereotype !== 'test') kc.set(g.stereotype, (kc.get(g.stereotype) ?? 0) + 1);
     kindsHere = [...kc].sort((a, b) => b[1] - a[1]);
     modsHere = mods;
+    hexLayout();
+    // In the hexagon layout every class starts inside its own cell, so nothing has to crawl there across the map.
+    if (f.hex && !f.three && mods.length > 1) {
+      const cn = mods.map(() => 0);
+      for (const n of nodes) cn[n.m]++;
+      hexS = ((Math.sqrt(Math.max(1, ...cn)) * (9 + (20 + f.distance * 160) * 0.16) + 30) * 2) / Math.sqrt(3);
+      for (const n of nodes) {
+        const c = hexAt[n.m] ?? { x: 0, y: 0 }, a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * hexS * 0.7;
+        if (Math.hypot(n.x - c.x * hexS, n.y - c.y * hexS) > hexS * 0.8) { n.x = c.x * hexS + Math.cos(a) * d; n.y = c.y * hexS + Math.sin(a) * d; }
+      }
+    }
     paintIssues();
     if (picked) picked = byId.get(picked.id) ?? null;
     heat = 1;
@@ -159,6 +170,14 @@
   $effect(() => { void openByFile; untrack(paintIssues); });
   $effect(() => { void f.center; void f.repel; void f.link; void f.distance; void f.group; heat = 1; });
   $effect(() => {
+    // Into the hexagon layout: start each class in its service's cell, then frame the honeycomb.
+    const hex = f.hex;
+    untrack(() => {
+      if (hex && !f.three) for (const n of nodes) { const c = hexAt[n.m] ?? { x: 0, y: 0 }, a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * hexS * 0.7; n.x = c.x * hexS + Math.cos(a) * d; n.y = c.y * hexS + Math.sin(a) * d; }
+      heat = 1; fit();
+    });
+  });
+  $effect(() => {
     // Into 3D: give every dot some depth to start from; back to 2D: flatten.
     const three = f.three;
     untrack(() => { for (const n of nodes) { if (three) { const a = anchor(n.m); n.x = a.x + (Math.random() - 0.5) * 80; n.y = a.y + (Math.random() - 0.5) * 80; n.z = a.z + (Math.random() - 0.5) * 80; } else n.z = 0; n.vz = 0; } heat = 1; follow = 2; });
@@ -167,6 +186,31 @@
   // One step of the simulation: repulsion between nearby dots (through a grid), springs along links (weaker for very
   // connected classes, as in d3), a pull to the middle, a pull to each service's middle, and services kept apart.
   // In 3D each service gets a spot spread over a sphere, so the graph has depth instead of lying in one plane.
+  // The hexagon layout: each service in its own hexagon cell, the most shared service in the middle and the rest in rings
+  // around it, like a honeycomb. hexAt holds each service's cell centre on a unit grid; hexS is the cell's radius.
+  let hexAt: { x: number; y: number }[] = [];
+  let hexS = 200;
+  function hexCells(count: number) {
+    const dirs = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+    const out: [number, number][] = [[0, 0]];
+    for (let k = 1; out.length < count; k++) {
+      let q = -k, r = k; // start of ring k
+      for (let i = 0; i < 6 && out.length < count; i++) for (let j = 0; j < k && out.length < count; j++) { out.push([q, r]); q += dirs[i][0]; r += dirs[i][1]; }
+    }
+    // Pointy-top hexagons: neighbours are √3 radii apart.
+    return out.map(([q, r]) => ({ x: Math.sqrt(3) * (q + r / 2), y: 1.5 * r }));
+  }
+  function hexLayout() {
+    // Rank services by how many links cross into or out of them, so the hub takes the middle cell.
+    const cross = mods.map(() => 0);
+    for (const e of edges) if (!e.same) { cross[e.a.m]++; cross[e.b.m]++; }
+    const rank = mods.map((_, i) => i).sort((a, b) => cross[b] - cross[a]);
+    const cells = hexCells(mods.length);
+    hexAt = [];
+    rank.forEach((m, i) => (hexAt[m] = cells[i]));
+  }
+  const hexOn = () => f.hex && !f.three && mods.length > 1;
+
   // The toolbar covers the top of the map and the legend its bottom, so the graph is framed and centred in what is left.
   const TOP = 96, BOT = 64;
   function anchor(m: number) {
@@ -205,7 +249,7 @@
     for (const e of edges) {
       const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y, dz = e.b.z - e.a.z, d = Math.hypot(dx, dy, dz) || 1;
       const share = 1 / Math.max(1, Math.min(e.a.deg, e.b.deg));
-      const k = ((d - (e.same ? rest : rest * 1.8)) / d) * spring * share * (e.same ? 1.6 : 0.3) * dt;
+      const k = ((d - (e.same ? rest : rest * 1.8)) / d) * spring * share * (e.same ? 1.6 : hexOn() ? 0.02 : 0.3) * dt; // in Hex, links across cells barely pull
       e.a.vx += dx * k; e.a.vy += dy * k; e.a.vz += dz * k; e.b.vx -= dx * k; e.b.vy -= dy * k; e.b.vz -= dz * k;
     }
     const cs = mods.map(() => ({ x: 0, y: 0, z: 0, n: 0 }));
@@ -222,7 +266,25 @@
       push[i].x += (dx / d) * p; push[i].y += (dy / d) * p; push[i].z += (dz / d) * p;
       push[j].x -= (dx / d) * p; push[j].y -= (dy / d) * p; push[j].z -= (dz / d) * p;
     }
+    const hex = hexOn();
+    if (hex) {
+      let big = 1;
+      for (const c of cs) big = Math.max(big, c.n);
+      hexS = ((Math.sqrt(big) * (9 + rest * 0.16) + 30) * 2) / Math.sqrt(3);
+    }
     for (const n of nodes) {
+      if (hex) {
+        // Pulled to its cell's middle and kept inside the hexagon (the circle that fits inside it).
+        const c = hexAt[n.m] ?? { x: 0, y: 0 }, hx = c.x * hexS, hy = c.y * hexS;
+        n.vx += (hx - n.x) * 0.35 * dt; n.vy += (hy - n.y) * 0.35 * dt;
+        const dx = n.x - hx, dy = n.y - hy, d = Math.hypot(dx, dy) || 1, inner = hexS * 0.84 - n.r - 4;
+        if (d > inner) { n.vx -= (dx / d) * (d - inner) * 1.5 * dt; n.vy -= (dy / d) * (d - inner) * 1.5 * dt; }
+        if (f.drift) { n.vx += Math.sin(t * 0.4 + n.r * 7) * 0.5 * dt; n.vy += Math.cos(t * 0.37 + n.r * 5) * 0.5 * dt; }
+        if (n.pinned) { n.vx = 0; n.vy = 0; continue; }
+        n.vx *= 0.82; n.vy *= 0.82;
+        n.x += n.vx * dt * 10 * heat; n.y += n.vy * dt * 10 * heat; n.z = 0;
+        continue;
+      }
       n.vx -= n.x * gravity * dt; n.vy -= n.y * gravity * dt; n.vz -= n.z * gravity * dt;
       if (three && mods.length > 1) { const a = anchor(n.m); n.vx += (a.x - n.x) * 0.1 * dt; n.vy += (a.y - n.y) * 0.1 * dt; n.vz += (a.z - n.z) * 0.1 * dt; }
       if (f.group && mods.length > 1) { const c = cs[n.m], p = push[n.m]; n.vx += ((c.x - n.x) * 0.5 + p.x) * dt; n.vy += ((c.y - n.y) * 0.5 + p.y) * dt; n.vz += ((c.z - n.z) * 0.5 + p.z) * dt; }
@@ -233,7 +295,7 @@
       n.z = three ? n.z + n.vz * dt * 10 * heat : 0;
     }
     // Keep the whole graph centred: whatever drifts, the middle stays in the middle.
-    if (nodes.length) {
+    if (nodes.length && !hex) {
       let mx = 0, my = 0, mz = 0;
       for (const n of nodes) { mx += n.x; my += n.y; mz += n.z; }
       mx /= nodes.length; my /= nodes.length; mz /= nodes.length;
@@ -252,6 +314,7 @@
       return { x: 0, y: 0, k: Math.min(2.2, (Math.min(wrap.clientWidth - 80, wrap.clientHeight - TOP - BOT - 40)) / (2 * R * 1.08)) };
     }
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    if (hexOn()) for (const c of hexAt) if (c) { x0 = Math.min(x0, c.x * hexS - hexS); x1 = Math.max(x1, c.x * hexS + hexS); y0 = Math.min(y0, c.y * hexS - hexS); y1 = Math.max(y1, c.y * hexS + hexS); }
     for (const n of nodes) { x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x); y0 = Math.min(y0, n.y); y1 = Math.max(y1, n.y); }
     const w = Math.max(200, x1 - x0 + 140), h = Math.max(200, y1 - y0 + 220);
     return { x: -(x0 + x1) / 2, y: -(y0 + y1) / 2, k: Math.min(2.2, Math.min(wrap.clientWidth / w, (wrap.clientHeight - TOP - BOT) / h)) };
@@ -384,6 +447,25 @@
       const dim = (n: N) => (f.issuesOnly && !n.issues ? 0.18 : 1);
 
       const fam = getComputedStyle(document.documentElement).getPropertyValue('--font') || 'sans-serif';
+      // The hexagon cells, under everything else.
+      if (hexOn()) {
+        const R = hexS * cam.k * 0.98, CY = cy0();
+        mods.forEach((_, i) => {
+          const c = hexAt[i];
+          if (!c) return;
+          const x = W / 2 + (c.x * hexS + cam.x) * cam.k, y = CY + (c.y * hexS + cam.y) * cam.k;
+          const own = litNode?.m === i;
+          const col = f.colour === 'service' ? hexRGB(SERVICE_COL[i % SERVICE_COL.length]) : dark ? '255,255,255' : '20,20,40';
+          ctx.beginPath();
+          for (let k = 0; k < 6; k++) { const a = Math.PI / 6 + (k * Math.PI) / 3; ctx[k ? 'lineTo' : 'moveTo'](x + Math.cos(a) * R, y + Math.sin(a) * R); }
+          ctx.closePath();
+          ctx.fillStyle = `rgba(${col},${f.colour === 'service' ? 0.07 : dark ? 0.025 : 0.03})`;
+          ctx.fill();
+          ctx.strokeStyle = own ? accent : `rgba(${col},${f.colour === 'service' ? 0.45 : dark ? 0.13 : 0.16})`;
+          ctx.lineWidth = own ? 1.6 : 1.2;
+          ctx.stroke();
+        });
+      }
       // Lines, styled by kind.
       for (const e of edges) {
         const on = litNode && (e.a === litNode || e.b === litNode);
@@ -475,7 +557,7 @@
           ctx.fillText(`${n.ins} in · ${n.outs} out · ${n.lines} lines`, n.px, below + 12);
         }
       }
-      if (f.group && mods.length > 1 && cam.k < 0.9) {
+      if ((f.group && mods.length > 1 && cam.k < 0.9) || hexOn()) {
         const cs = mods.map(() => ({ x: 0, y: 0, n: 0, top: Infinity }));
         for (const n of nodes) { const c = cs[n.m]; c.x += n.px; c.y += n.py; c.n++; c.top = Math.min(c.top, n.py); }
         ctx.font = `500 12px ${fam}`;
@@ -484,8 +566,9 @@
           const c = cs[i];
           if (!c.n) return;
           // A small pill, so the name reads over dots and links, and never under the toolbar.
-          const x = c.x / c.n, w = ctx.measureText(m).width + 18;
-          let y = Math.max(TOP + 14, c.top - 16);
+          const hc = hexOn() ? hexAt[i] : null;
+          const x = hc ? W / 2 + (hc.x * hexS + cam.x) * cam.k : c.x / c.n, w = ctx.measureText(m).width + 18;
+          let y = hc ? cy0() + (hc.y * hexS + cam.y) * cam.k - hexS * cam.k * 0.98 + 5 : Math.max(TOP + 14, c.top - 16);
           // Two names never sit on top of each other: a later one moves down until it is clear.
           for (let tries = 0; tries < 6 && placed.some((p) => Math.abs(p.x - x) < (p.w + w) / 2 + 4 && Math.abs(p.y - y) < 24); tries++) y += 24;
           placed.push({ x, y, w });
@@ -549,8 +632,9 @@
 
   <div class="hud tr">
     <div class="seg">
-      <button class:on={!f.three} onclick={() => (f.three = false)}>2D</button>
-      <button class:on={f.three} onclick={() => (f.three = true)}>3D</button>
+      <button class:on={!f.three && !f.hex} onclick={() => { f.three = false; f.hex = false; }}>2D</button>
+      <button class:on={!f.three && f.hex} onclick={() => { f.three = false; f.hex = true; }} title="Each service in its own hexagon">Hex</button>
+      <button class:on={f.three} onclick={() => { f.three = true; f.hex = false; }}>3D</button>
     </div>
     <select class="pick sm" bind:value={f.sizeBy} title="What the size of a dot shows">
       <option value="links">Size: links</option><option value="in">Size: used by</option><option value="out">Size: uses</option>
