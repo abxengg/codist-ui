@@ -7,7 +7,8 @@
   import { live } from '../lib/live.svelte';
   import Orb from './Orb.svelte';
 
-  const running = $derived(live.call?.status === 'running' || live.forced === 'reading' || live.forced === 'writing');
+  // Only while the AI is really working: never for "All caught up", and not for a forced ?orb= preview.
+  const running = $derived(live.call?.status === 'running');
   const elapsed = $derived(live.call ? Math.max(0, Math.round((live.now - live.call.at) / 1000)) : 0);
   const mm = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 </script>

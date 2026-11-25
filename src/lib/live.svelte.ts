@@ -39,6 +39,8 @@ class Live {
       const what = (c as Activity & { phase?: string }).phase === 'writing' ? 'Writing up' : 'Reading';
       return file ? `${what} ${file}` : c.title || 'Thinking';
     }
+    if (this.forced === 'reading') return 'Reading the code';
+    if (this.forced === 'writing') return 'Writing a fix';
     if (this.mood === 'alert') return 'Found something';
     if (app.status?.llmProblem) return 'AI offline · checks only';
     if (this.waiting) return `${this.waiting} commit${this.waiting === 1 ? '' : 's'} to read`;
