@@ -72,7 +72,8 @@
 
   // What the detail panel shows about the picked class.
   type Link = { n: N; kind: string };
-  let details = $state<{ uses: Link[]; usedBy: Link[]; usesAll: number; usedByAll: number; issues: Issue[][]; methods: GraphNode['members']; fields: number } | null>(null);
+  // Raw, not deep state: its links hold the map's own node objects, and a picked node is compared by identity.
+  let details = $state.raw<{ uses: Link[]; usedBy: Link[]; usesAll: number; usedByAll: number; issues: Issue[][]; methods: GraphNode['members']; fields: number } | null>(null);
   // Counted from the whole code graph, so the numbers never depend on what the map shows; the lists hold the classes
   // on the map, and say how many more there are (tests, or classes filtered out).
   function describe(n: N | null) {
@@ -352,10 +353,18 @@
     if (t && snap) Object.assign(cam, t);
     follow = snap ? 4 : 1.6;
   }
+  // Show a class with its neighbours: the view frames the class and every class it links to, so its links are on
+  // screen, however far they reach.
   function focusOn(n: N) {
     picked = n; follow = 0;
-    if (!f.three) { cam.x = -n.x; cam.y = -n.y; }
-    cam.k = Math.max(cam.k, 1.4);
+    if (f.three || !wrap) { cam.k = Math.max(cam.k, 1.4); return; }
+    let x0 = n.x, x1 = n.x, y0 = n.y, y1 = n.y;
+    for (const o of adj.get(n) ?? []) { x0 = Math.min(x0, o.x); x1 = Math.max(x1, o.x); y0 = Math.min(y0, o.y); y1 = Math.max(y1, o.y); }
+    const w = Math.max(160, x1 - x0 + 120), h = Math.max(160, y1 - y0 + 120);
+    // The detail panel covers the right of the map, so frame in the part left of it.
+    const room = Math.max(300, wrap.clientWidth - 440);
+    cam.k = Math.max(0.15, Math.min(1.6, room / w, (wrap.clientHeight - TOP - BOT) / h));
+    cam.x = -(x0 + x1) / 2 - 220 / cam.k; cam.y = -(y0 + y1) / 2;
   }
 
   const hexRGB = (h: string) => `${parseInt(h.slice(1, 3), 16)},${parseInt(h.slice(3, 5), 16)},${parseInt(h.slice(5, 7), 16)}`;

@@ -10,8 +10,11 @@
   let refs = $state.raw<BranchRef[]>([]);
   let query = $state('');
   let box = $state<HTMLDivElement>();
+  // The menu opens towards the side with room, so near the right edge it lines up with the button's right side.
+  let flip = $state(false);
   async function toggle() {
     open = !open;
+    if (open && box) flip = box.getBoundingClientRect().left + 390 > window.innerWidth;
     if (open) {
       query = '';
       try { refs = await api.refs(); } catch { refs = []; }
@@ -37,7 +40,7 @@
     <button class="back mono" title="Go back to the checked-out branch" onclick={() => pick(app.status!.checkedOut!)}>back to {app.status.checkedOut}</button>
   {/if}
   {#if open}
-    <div class="menu" role="menu" transition:dropdown>
+    <div class="menu" class:flip role="menu" transition:dropdown>
       <input bind:value={query} placeholder="Find a branch…" spellcheck="false" />
       <ul>
         {#each shown as r (r.name)}
@@ -69,6 +72,7 @@
   li button:hover { background: var(--hover); }
   li button.on { background: var(--accent-soft); }
   .n { font-size: 12px; color: var(--text); }
+  .menu.flip { left: auto; right: 0; }
   em { font: 500 10px var(--font); font-style: normal; color: var(--good); margin-left: 4px; }
   .m { font-size: 11.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .w { font-size: 10.5px; color: var(--text-3); }
