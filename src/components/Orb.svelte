@@ -2,7 +2,7 @@
   // The AI as a glass sphere with a honeycomb of fine lines on it, turning slowly: the far side shows faintly through
   // the glass, the rim glows, and highlights catch the light. Its mood shows in what happens inside:
   //   offline  grey and slow, nothing lights;            idle     turns gently, a cell glints now and then;
-  //   reading  cells flicker alight, a scan line sweeps, the core pulses (it is thinking);
+  //   reading  cells slowly glow and fade, the core breathes (it is thinking);
   //   writing  rings of lit cells spread from the front and light ripples out past the rim (it is making something);
   //   alert    a warm flare and a burst of cells (it found something).
   import type { Mood } from '../lib/live.svelte';
@@ -13,8 +13,8 @@
   const LOOKS: Record<Mood, Look> = {
     offline: { col: [150, 150, 160], spin: 0.08, ripple: 0, pulse: 0, think: 0, make: 0 },
     idle: { col: [140, 112, 255], spin: 0.25, ripple: 0.02, pulse: 0.02, think: 0.06, make: 0 },
-    reading: { col: [96, 165, 255], spin: 0.9, ripple: 0.06, pulse: 0.03, think: 1, make: 0 },
-    writing: { col: [168, 120, 255], spin: 0.6, ripple: 0.03, pulse: 0.08, think: 0.35, make: 1 },
+    reading: { col: [150, 112, 255], spin: 0.45, ripple: 0.06, pulse: 0.03, think: 1, make: 0 },
+    writing: { col: [176, 120, 255], spin: 0.4, ripple: 0.03, pulse: 0.08, think: 0.35, make: 1 },
     alert: { col: [255, 146, 64], spin: 1.2, ripple: 0.08, pulse: 0.12, think: 1, make: 0.6 },
   };
 
@@ -74,7 +74,8 @@
     canvas.height = W * dpr;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const { pts, lines, cells } = honeycomb(size < 40 ? 1 : 2);
-    const heat = new Float32Array(cells.length); // how lit each cell is, fading
+    const heat = new Float32Array(cells.length); // how lit each cell is now
+    const glow = new Float32Array(cells.length); // how lit it is heading to: cells ease towards it, so they fade in and out
     let spawn = 0;
     const P = pts.length, sx = new Float32Array(P), sy = new Float32Array(P), sz = new Float32Array(P);
     let rot = 0, t = 0, last = performance.now(), raf = 0;
@@ -108,12 +109,16 @@
       ctx.strokeStyle = col(0.13); ctx.stroke();
       // Thinking: cells light at random, mostly on the near side, and fade. Making: rings of cells light outward from
       // the point facing the viewer.
-      for (let i = 0; i < heat.length; i++) heat[i] *= Math.exp(-dt * 2.6);
-      spawn += dt * (2 + 40 * cur.think);
+      // Slow and smooth: a few cells at a time start to glow, ease up over about a second and fade over a few.
+      for (let i = 0; i < heat.length; i++) {
+        glow[i] *= Math.exp(-dt * 0.55);
+        heat[i] += (glow[i] - heat[i]) * Math.min(1, dt * 1.4);
+      }
+      spawn += dt * (0.6 + 5 * cur.think);
       while (spawn > 1) {
         spawn -= 1;
         const i = (Math.random() * cells.length) | 0;
-        if (cur.think > 0.02 || Math.random() < 0.08) heat[i] = Math.max(heat[i], 0.5 + Math.random() * 0.5);
+        if (cur.think > 0.02 || Math.random() < 0.15) glow[i] = Math.max(glow[i], 0.55 + Math.random() * 0.45);
       }
       const cz = (cell: { at: number[] }) => { const [x, y, z] = cell.at; const z1 = -x * sy0 + z * cy; return y * st + z1 * ct; };
       // A soft core of light, breathing while the AI works.
@@ -160,14 +165,6 @@
       ctx.strokeStyle = lite(0.85);
       ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
-      // Reading: a scan line sweeps up and down inside the glass.
-      if (cur.think > 0.05) {
-        const y = c + Math.sin(t * 1.7) * R * 0.85, half = Math.sqrt(Math.max(0, R * R - (y - c) ** 2));
-        const g = ctx.createLinearGradient(c - half, y, c + half, y);
-        g.addColorStop(0, lite(0)); g.addColorStop(0.5, lite(0.7 * cur.think)); g.addColorStop(1, lite(0));
-        ctx.strokeStyle = g; ctx.lineWidth = Math.max(1, size / 90);
-        ctx.beginPath(); ctx.moveTo(c - half, y); ctx.lineTo(c + half, y); ctx.stroke();
-      }
       // Making: rings of light leave the rim and fade as they grow.
       if (cur.make > 0.05) {
         for (let k2 = 0; k2 < 3; k2++) {
