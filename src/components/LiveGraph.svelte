@@ -155,7 +155,7 @@
     if (f.hex && !f.three && mods.length > 1) {
       const cn = mods.map(() => 0);
       for (const n of nodes) cn[n.m]++;
-      hexS = ((Math.sqrt(Math.max(1, ...cn)) * (9 + (20 + f.distance * 160) * 0.16) + 30) * 2) / Math.sqrt(3);
+      hexS = Math.max(150, ((Math.sqrt(Math.max(1, ...cn)) * (9 + (20 + f.distance * 160) * 0.16) + 30) * 2) / Math.sqrt(3));
       for (const n of nodes) {
         const c = hexAt[n.m] ?? { x: 0, y: 0 }, a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * hexS * 0.7;
         if (Math.hypot(n.x - c.x * hexS, n.y - c.y * hexS) > hexS * 0.8) { n.x = c.x * hexS + Math.cos(a) * d; n.y = c.y * hexS + Math.sin(a) * d; }
@@ -299,7 +299,7 @@
     if (hex) {
       let big = 1;
       for (const c of cs) big = Math.max(big, c.n);
-      hexS = ((Math.sqrt(big) * (9 + rest * 0.16) + 30) * 2) / Math.sqrt(3);
+      hexS = Math.max(150, ((Math.sqrt(big) * (9 + rest * 0.16) + 30) * 2) / Math.sqrt(3)); // small services still get room
     }
     for (const n of nodes) {
       if (hex) {
@@ -312,6 +312,9 @@
         if (n.pinned) { n.vx = 0; n.vy = 0; continue; }
         n.vx *= 0.82; n.vy *= 0.82;
         n.x += n.vx * dt * 10 * heat; n.y += n.vy * dt * 10 * heat; n.z = 0;
+        // A hard wall: however hard the others push, a class stays inside its own hexagon.
+        const ex = n.x - hx, ey = n.y - hy, ed = Math.hypot(ex, ey);
+        if (ed > inner && ed > 0) { n.x = hx + (ex / ed) * inner; n.y = hy + (ey / ed) * inner; n.vx *= 0.3; n.vy *= 0.3; }
         continue;
       }
       n.vx -= n.x * gravity * dt; n.vy -= n.y * gravity * dt; n.vz -= n.z * gravity * dt;
