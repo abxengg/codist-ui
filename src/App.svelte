@@ -1,4 +1,6 @@
 <script lang="ts">
+  import AIStrip from './components/AIStrip.svelte';
+  import ChatView from './components/ChatView.svelte';
   import { onMount } from 'svelte';
   import { app, boot, savePref, saveStr, selectCommit } from './lib/store.svelte';
   import { preload } from './lib/highlight';
@@ -25,11 +27,11 @@
   let dragging = $state<'side' | 'panel' | null>(null);
 
   // The screen is in the address, so a reload or a bookmark lands in the same place.
-  const SCREENS = ['now', 'issues', 'commits', 'map', 'review', 'graph', 'incidents', 'memory', 'activity', 'repo', 'branches', 'mine', 'team', 'release'];
+  const SCREENS = ['now', 'issues', 'commits', 'map', 'review', 'graph', 'incidents', 'memory', 'activity', 'repo', 'branches', 'mine', 'team', 'release', 'chat'];
   const wanted = location.hash.slice(1);
   app.mode = SCREENS.includes(wanted) ? (wanted as typeof app.mode) : 'now';
   // The new screens fill the window themselves; the classic ones keep their top bar.
-  const NEW = new Set(['now', 'issues', 'commits', 'map', 'graph', 'activity', 'repo', 'incidents']);
+  const NEW = new Set(['now', 'issues', 'commits', 'map', 'graph', 'activity', 'repo', 'incidents', 'chat']);
   $effect(() => {
     document.title = app.status?.repo ? `Codist · ${app.status.repo}` : 'Codist';
   });
@@ -124,6 +126,7 @@
 <Rail />
 <div class="shell">
   {#if !NEW.has(app.mode)}<TopBar />{/if}
+  {#if NEW.has(app.mode)}<AIStrip />{/if}
   {#if app.status?.operation}
     <div class="op" role="status">
       <b>{app.status.operation[0].toUpperCase() + app.status.operation.slice(1)} in progress</b>
@@ -146,6 +149,8 @@
   {:else if app.mode === 'repo'}
     <!-- It describes the followed branch, so it loads again when that changes. -->
     {#key app.status?.branch}<RepoView />{/key}
+  {:else if app.mode === 'chat'}
+    <ChatView />
   {:else if app.mode === 'activity'}
     <ActivityView />
   {:else}

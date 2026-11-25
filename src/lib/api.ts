@@ -80,6 +80,8 @@ export const api = {
     const r = await fetch(`/api/ignores/${id}`, { method: 'DELETE' });
     if (!r.ok) throw new Error((await r.json()).error ?? r.statusText);
   },
+  chat: (messages: { role: 'user' | 'assistant'; content: string }[], path: string | null) =>
+    request<{ answer: string; sources: { path: string; line: number }[]; looked: { path: string; line: number; name: string }[]; took: number; model: string }>('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, path }) }),
   ask: (body: { path: string | null; question: string; node: string | null }) =>
     request<{ answer: string }>('/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   edit: (path: string, instruction: string) =>

@@ -16,12 +16,13 @@
     { mode: 'now', label: 'Now', group: 'work', d: 'M8 3.2a4.8 4.8 0 1 0 0 9.6 4.8 4.8 0 0 0 0-9.6ZM8 6.2a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6Z' },
     { mode: 'issues', label: 'Issues', group: 'work', d: 'M8 2.2 13.8 5v3.4c0 3-2.4 4.9-5.8 5.9-3.4-1-5.8-2.9-5.8-5.9V5L8 2.2ZM8 5.4v3.4M8 10.6v.1' },
     { mode: 'commits', label: 'Commits', group: 'work', d: 'M8 1.8v3.4M8 10.8v3.4M8 5.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6Z' },
+    { mode: 'chat', label: 'Chat', group: 'work', d: 'M2.5 4.2A1.7 1.7 0 0 1 4.2 2.5h7.6a1.7 1.7 0 0 1 1.7 1.7v5a1.7 1.7 0 0 1-1.7 1.7H7l-3 2.6v-2.6h0A1.7 1.7 0 0 1 2.5 9.2v-5ZM5.5 6.7h5' },
     { mode: 'incidents', label: 'Incidents', group: 'work', d: 'M8 2.4 14.2 13H1.8L8 2.4ZM8 6.5v3M8 11.2v.1' },
     { mode: 'map', label: 'Map', group: 'see', d: 'M4 4.5a1.75 1.75 0 1 0 0-.01M12 3.5a1.75 1.75 0 1 0 0-.01M12 12.5a1.75 1.75 0 1 0 0-.01M5.6 4.9l4.8-1M5.4 5.6l5.2 5.8' },
     { mode: 'activity', label: 'Activity', group: 'see', d: 'M1.8 8.5h2.7L6.3 3.5l3.2 9 1.9-4h2.8' },
     { mode: 'repo', label: 'Repository', group: 'see', d: 'M3 3.5A1.5 1.5 0 0 1 4.5 2h7A1.5 1.5 0 0 1 13 3.5V14l-5-2.5L3 14V3.5Z' },
   ];
-  const shown = (g: 'work' | 'see') => ITEMS.filter((i) => i.group === g && (['now', 'issues', 'commits', 'map'].includes(i.mode) || app.menuOn(i.mode)));
+  const shown = (g: 'work' | 'see') => ITEMS.filter((i) => i.group === g && (['now', 'issues', 'commits', 'map', 'chat'].includes(i.mode) || app.menuOn(i.mode)));
   const open = $derived(app.issueList?.issues.filter((i) => i.state === 'open').length ?? 0);
   const analysing = $derived(app.incidents.filter((i) => i.status === 'analysing').length);
   const count = (m: Mode) => (m === 'issues' ? open : m === 'commits' ? live.waiting : m === 'incidents' ? analysing : 0);

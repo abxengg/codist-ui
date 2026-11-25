@@ -190,6 +190,7 @@
   // around it, like a honeycomb. hexAt holds each service's cell centre on a unit grid; hexS is the cell's radius.
   let hexAt: { x: number; y: number }[] = [];
   let hexS = 200;
+  let pairs: { a: number; b: number; n: number }[] = [];
   function hexCells(count: number) {
     const dirs = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
     const out: [number, number][] = [[0, 0]];
@@ -205,6 +206,14 @@
     const cross = mods.map(() => 0);
     for (const e of edges) if (!e.same) { cross[e.a.m]++; cross[e.b.m]++; }
     const rank = mods.map((_, i) => i).sort((a, b) => cross[b] - cross[a]);
+    // The links between two services, counted once per pair, for the thick lines between cells.
+    const pm = new Map<string, { a: number; b: number; n: number }>();
+    for (const e of edges) if (!e.same) {
+      const a = Math.min(e.a.m, e.b.m), b = Math.max(e.a.m, e.b.m), k = `${a}:${b}`;
+      const x = pm.get(k) ?? { a, b, n: 0 };
+      x.n++; pm.set(k, x);
+    }
+    pairs = [...pm.values()];
     const cells = hexCells(mods.length);
     hexAt = [];
     rank.forEach((m, i) => (hexAt[m] = cells[i]));
@@ -402,8 +411,14 @@
       else if (f.three) { cam.yaw = drag.yaw + dx * 0.006; cam.pitch = Math.max(-1.3, Math.min(1.3, drag.pitch + dy * 0.006)); canvas!.style.cursor = 'grabbing'; }
       else { cam.x = drag.cx + dx / cam.k; cam.y = drag.cy + dy / cam.k; canvas!.style.cursor = 'grabbing'; }
     });
-    canvas!.addEventListener('pointerup', () => {
+    canvas!.addEventListener('pointerup', (e) => {
       const pick = (drag as { pick?: N } | null)?.pick;
+      // A click on an empty part of a hexagon opens that service on its own.
+      if (drag && !drag.n && !drag.moved && !pick && hexOn()) {
+        const wx = (e.offsetX - W / 2) / cam.k - cam.x, wy = (e.offsetY - cy0()) / cam.k - cam.y;
+        const i = hexAt.findIndex((c) => c && Math.hypot(c.x * hexS - wx, c.y * hexS - wy) < hexS * 0.86);
+        if (i >= 0) { f.only = mods[i]; drag = null; return; }
+      }
       if (drag?.n) { drag.n.pinned = false; if (!drag.moved) picked = drag.n; }
       else if (drag && !drag.moved) picked = pick ?? null;
       drag = null;
@@ -462,6 +477,11 @@
       // The hexagon cells, under everything else.
       if (hexOn()) {
         const R = hexS * cam.k * 0.98, CY = cy0();
+        const cellIssues = mods.map(() => ({ n: 0, worst: '' }));
+        for (const n of nodes) if (n.issues) {
+          const c = cellIssues[n.m]; c.n += n.issues;
+          if (!c.worst || ORDER.indexOf(n.worst) < ORDER.indexOf(c.worst)) c.worst = n.worst;
+        }
         mods.forEach((_, i) => {
           const c = hexAt[i];
           if (!c) return;
@@ -471,19 +491,49 @@
           ctx.beginPath();
           for (let k = 0; k < 6; k++) { const a = Math.PI / 6 + (k * Math.PI) / 3; ctx[k ? 'lineTo' : 'moveTo'](x + Math.cos(a) * R, y + Math.sin(a) * R); }
           ctx.closePath();
-          ctx.fillStyle = `rgba(${col},${f.colour === 'service' ? 0.07 : dark ? 0.025 : 0.03})`;
+          // A cell with open issues takes a wash of its worst issue's colour.
+          const iss = cellIssues[i];
+          const tint = iss.n && f.colour !== 'service' ? hexRGB(SEV_COL[iss.worst] ?? SEV_COL.medium) : col;
+          ctx.fillStyle = `rgba(${tint},${f.colour === 'service' ? 0.07 : iss.n ? 0.07 : dark ? 0.025 : 0.03})`;
           ctx.fill();
-          ctx.strokeStyle = own ? accent : `rgba(${col},${f.colour === 'service' ? 0.45 : dark ? 0.13 : 0.16})`;
+          ctx.strokeStyle = own ? accent : `rgba(${tint},${f.colour === 'service' ? 0.45 : iss.n ? 0.4 : dark ? 0.13 : 0.16})`;
           ctx.lineWidth = own ? 1.6 : 1.2;
           ctx.stroke();
         });
+        // One thick line per pair of services that call each other, sized by how many links cross.
+        for (const p of pairs) {
+          const A = hexAt[p.a], B = hexAt[p.b];
+          if (!A || !B) continue;
+          const ax = W / 2 + (A.x * hexS + cam.x) * cam.k, ay = CY + (A.y * hexS + cam.y) * cam.k;
+          const bx = W / 2 + (B.x * hexS + cam.x) * cam.k, by = CY + (B.y * hexS + cam.y) * cam.k;
+          const d = Math.hypot(bx - ax, by - ay) || 1, ux = (bx - ax) / d, uy = (by - ay) / d, cut = Math.min(d * 0.32, hexS * cam.k * 0.62);
+          const lit = litNode && (litNode.m === p.a || litNode.m === p.b);
+          const hot = cellIssues[p.a].n || cellIssues[p.b].n;
+          ctx.strokeStyle = lit ? accent : hot ? `rgba(${hexRGB(SEV_COL.high)},0.55)` : dark ? 'rgba(160,170,235,0.45)' : 'rgba(90,100,170,0.45)';
+          ctx.lineWidth = Math.min(14, 1.5 + Math.log2(p.n + 1) * 1.7) * Math.max(0.6, Math.min(1.6, cam.k));
+          ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(ax + ux * cut, ay + uy * cut); ctx.lineTo(bx - ux * cut, by - uy * cut); ctx.stroke();
+          ctx.lineCap = 'butt';
+        }
+        // A badge with the open issue count on each cell's corner.
+        ctx.font = `600 11px ${getComputedStyle(document.documentElement).getPropertyValue('--font') || 'sans-serif'}`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        mods.forEach((_, i) => {
+          const c = hexAt[i], iss = cellIssues[i];
+          if (!c || !iss.n) return;
+          const a = -Math.PI / 6, x = W / 2 + (c.x * hexS + cam.x) * cam.k + Math.cos(a) * R * 0.86, y = CY + (c.y * hexS + cam.y) * cam.k + Math.sin(a) * R * 0.86;
+          ctx.fillStyle = SEV_COL[iss.worst] ?? SEV_COL.medium;
+          ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#1b1206'; ctx.fillText(String(iss.n), x, y + 0.5);
+        });
+        ctx.textBaseline = 'alphabetic';
       }
       // Lines, styled by kind.
       for (const e of edges) {
         const on = litNode && (e.a === litNode || e.b === litNode);
         const style = LINK[e.kind] ?? LINK.uses;
         const base = (e.same ? 0.3 : 0.07) * Math.min(depthA(e.a), depthA(e.b)) * Math.min(dim(e.a), dim(e.b));
-        const a = on ? 0.4 + 0.55 * lit : base * (1 - 0.75 * lit);
+        const a = on ? 0.4 + 0.55 * lit : !e.same && hexOn() ? 0 : base * (1 - 0.75 * lit); // in Hex the pair lines stand for them
         if (a < 0.015) continue;
         // A link to a class with open issues takes the issue's colour; otherwise its kind's, or plain grey.
         const hot = e.a.issues ? e.a : e.b.issues ? e.b : null;

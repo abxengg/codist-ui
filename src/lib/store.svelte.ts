@@ -109,6 +109,8 @@ class AppState {
   incidentMarkdown = $state('');
   incidentError = $state<string | null>(null);
   incidentId = $state<string | null>(null); // null = "new analysis" form
+  /** The chosen incident is open on its floating stage. */
+  incidentStage = $state(false);
   /** Every tracked issue (all states); the hub filters it client-side. */
   issueList = $state.raw<IssueList | null>(null);
 

@@ -1,7 +1,8 @@
 <script lang="ts">
-  // The AI as a sphere of points turning in 3D. Each point is a flat dot; nearer ones are larger and brighter, so the
-  // sphere reads as solid without any gradient. Its mood sets colour, pace and shape: offline is grey and slow, idle
-  // turns gently, reading spins faster and ripples, writing pulses outward, alert flares warm for a moment.
+  // The AI as a hexagon of points: a honeycomb lattice, gently domed, swaying in 3D. Each point is a flat dot; nearer
+  // ones are larger and brighter, so it reads as solid without any gradient. Its mood sets colour, pace and shape:
+  // offline is grey and still, idle sways gently, reading sways faster with a wave running across it, writing sends
+  // rings out from the middle, alert flares warm for a moment.
   import type { Mood } from '../lib/live.svelte';
 
   let { mood = 'idle', size = 160, label = '' }: { mood?: Mood; size?: number; label?: string } = $props();
@@ -27,12 +28,17 @@
     canvas.width = W * dpr;
     canvas.height = W * dpr;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    // Points spread evenly over a sphere (a Fibonacci lattice). Fewer for a small orb.
-    const N = size < 40 ? 70 : size < 100 ? 260 : 520;
-    const pts = Array.from({ length: N }, (_, i) => {
-      const y = 1 - (2 * (i + 0.5)) / N, r = Math.sqrt(1 - y * y), a = i * 2.399963;
-      return [Math.cos(a) * r, y, Math.sin(a) * r] as [number, number, number];
-    });
+    // Points on a honeycomb lattice that fills a pointy-top hexagon, K rings out from the middle; fewer for a small
+    // orb. Each point is lifted a little towards the viewer the nearer it is to the middle, so the hexagon is domed.
+    const K = size < 40 ? 4 : size < 100 ? 7 : 8;
+    const pts: [number, number, number][] = [];
+    for (let q = -K; q <= K; q++) for (let r = Math.max(-K, -q - K); r <= Math.min(K, -q + K); r++) {
+      // Axial lattice coordinates, turned so the hexagon has a corner at the top, like the Map's cells.
+      const y = (Math.sqrt(3) * (q + r / 2)) / (Math.sqrt(3) * K), x = (1.5 * r) / (Math.sqrt(3) * K);
+      const d = Math.min(1, Math.hypot(x, y));
+      pts.push([x, y, 0.32 * (1 - d * d)]);
+    }
+    const N = pts.length;
     const order = pts.map((_, i) => i);
     const z = new Float32Array(N), sx = new Float32Array(N), sy = new Float32Array(N);
     let rot = 0, t = 0, last = performance.now(), raf = 0;
@@ -44,25 +50,28 @@
       cur.spin = mix(cur.spin, want.spin, k); cur.ripple = mix(cur.ripple, want.ripple, k); cur.pulse = mix(cur.pulse, want.pulse, k);
       cur.col = cur.col.map((v, i) => mix(v, want.col[i], k)) as [number, number, number];
       rot += dt * cur.spin;
-      const R = size * 0.46 * (1 + Math.sin(t * 2.2) * cur.pulse * 0.5), c = W / 2;
-      const cy = Math.cos(rot), sy0 = Math.sin(rot), tilt = 0.42, ct = Math.cos(tilt), st = Math.sin(tilt);
+      const R = size * 0.5 * (1 + Math.sin(t * 2.2) * cur.pulse * 0.4), c = W / 2;
+      // A sway, not a spin: the hexagon turns a little each way so it always reads as a hexagon.
+      const yaw = Math.sin(rot * 1.6) * 0.55, tilt = 0.18 + Math.sin(rot * 1.1) * 0.16;
+      const cy = Math.cos(yaw), sy0 = Math.sin(yaw), ct = Math.cos(tilt), st = Math.sin(tilt);
       for (let i = 0; i < N; i++) {
         let [x, y, zz] = pts[i];
-        const wave = 1 + cur.ripple * Math.sin(y * 6 + t * 3) + cur.pulse * Math.sin(t * 4 - i * 0.02);
-        x *= wave; y *= wave; zz *= wave;
+        const d = Math.hypot(x, y);
+        // Reading: a wave runs across; writing: rings travel out from the middle.
+        zz += cur.ripple * 1.6 * Math.sin(x * 5 + y * 3 + t * 3.2) + cur.pulse * 2.2 * Math.sin(d * 9 - t * 5) * (1 - d * 0.5);
         const x1 = x * cy + zz * sy0, z1 = -x * sy0 + zz * cy; // turn around the vertical axis
         const y2 = y * ct - z1 * st, z2 = y * st + z1 * ct; // tilt towards the viewer
-        const p = 2.6 / (2.6 - z2); // perspective
+        const p = 2.6 / (2.6 - z2 * 0.8); // perspective
         sx[i] = c + x1 * R * p; sy[i] = c + y2 * R * p; z[i] = z2;
       }
       order.sort((a, b) => z[a] - z[b]);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, W);
       const [r0, g0, b0] = cur.col.map((v) => v | 0);
-      const dot = Math.max(0.8, size / 110);
+      const dot = Math.max(0.8, size / (K * 11));
       for (const i of order) {
-        const d = (z[i] + 1) / 2; // 0 far, 1 near
-        ctx.fillStyle = `rgba(${r0},${g0},${b0},${0.18 + 0.82 * d})`;
+        const d = Math.max(0, Math.min(1, (z[i] + 0.6) / 1.2)); // 0 far, 1 near
+        ctx.fillStyle = `rgba(${r0},${g0},${b0},${0.35 + 0.65 * d})`;
         ctx.beginPath(); ctx.arc(sx[i], sy[i], dot * (0.55 + d), 0, Math.PI * 2); ctx.fill();
       }
       if (!reduce) raf = requestAnimationFrame(frame);

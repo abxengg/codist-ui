@@ -10,6 +10,7 @@
   import ReviewTab from './ReviewTab.svelte';
   import CopyButton from './CopyButton.svelte';
   import Orb from './Orb.svelte';
+  import Constellation from './Constellation.svelte';
   import type { FindingWithPath, FixRef } from '../lib/types';
 
   const open = $derived(app.commitStage && app.mode === 'commits');
@@ -197,10 +198,10 @@
           <p>{running ? 'The AI is still reading this commit.' : 'The code checks and the AI found nothing on these lines.'}</p>
         </div>
       {/if}
-      {#if d.analysis.impacted.length}
+      {#if d.analysis.changed.length}
         <div class="card reach" in:fly|global={{ x: 26, duration: 320, delay: 260, easing: cubicOut }} out:fly|global={{ x: 18, duration: 180 }}>
           <h3 class="ui-label">What it reaches</h3>
-          <div class="chips">{#each d.analysis.impacted.slice(0, 12) as c}<span class="ui-pill mono">{short(String(c).replace(/\./g, '/'))}</span>{/each}{#if d.analysis.impacted.length > 12}<span class="ui-pill">+{d.analysis.impacted.length - 12}</span>{/if}</div>
+          <Constellation changed={d.analysis.changed} impacted={d.analysis.impacted} hot={new Set(all.map((g) => g[0].path))} sha={app.selectedSha} />
         </div>
       {/if}
     </aside>

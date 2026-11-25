@@ -6,6 +6,7 @@
   import { api } from '../lib/api';
   import { ago } from '../lib/theme';
   import IncidentDetail from './IncidentDetail.svelte';
+  import IncidentStage from './IncidentStage.svelte';
 
   let title = $state('');
   let logs = $state('');
@@ -23,6 +24,7 @@
       logs = '';
       await loadIncidents();
       await openIncident(id);
+      app.incidentStage = true;
     } catch (e) {
       toast((e as Error).message, 'bad', 6000);
     } finally {
@@ -45,6 +47,7 @@
     if (f) void readFile(f);
   }
   const lines = $derived(logs ? logs.split('\n').length : 0);
+  function stageOf(id: string) { void openIncident(id); app.incidentStage = true; }
 </script>
 
 <div class="incidents">
@@ -56,7 +59,7 @@
     <ul>
       {#each app.incidents as i (i.id)}
         <li>
-          <button class="item" class:selected={i.id === app.incidentId} onclick={() => openIncident(i.id)}>
+          <button class="item" class:selected={i.id === app.incidentId} onclick={() => stageOf(i.id)}>
             <span class="t">{i.title}</span>
             <span class="meta">
               {#if i.status === 'analysing'}<ThinkingOrb state="searching" /> analysing{:else if i.confirmed}<span class="ok">✓ root cause confirmed</span>{:else if i.status === 'failed'}<span class="bad">failed</span>{:else}{i.occurrences} occurrence{i.occurrences === 1 ? '' : 's'}{/if}
@@ -79,6 +82,23 @@
     {:else if app.incidentId}
       <div class="empty"><Orb mood="reading" size={64} label="Opening the incident" /></div>
     {:else}
+      {#if app.incidents.length}
+        <div class="board">
+          <h1>Incidents</h1>
+          <div class="cards">
+            {#each app.incidents.slice(0, 9) as i (i.id)}
+              <button class="icard" class:hot={i.status !== 'failed' && !i.confirmed} onclick={() => stageOf(i.id)}>
+                <span class="top">
+                  {#if i.status === 'analysing'}<span class="ui-pill ai">analysing</span>{:else if i.confirmed}<span class="ui-pill good">confirmed</span>{:else if i.status === 'failed'}<span class="ui-pill warn">failed</span>{:else}<span class="ui-pill">{i.occurrences} occurrence{i.occurrences === 1 ? '' : 's'}</span>{/if}
+                  <span class="time">{ago(i.createdAt)}</span>
+                </span>
+                <b>{i.title}</b>
+                {#if i.topCause}<span class="tc"><i>Likely cause</i>{i.topCause}</span>{:else}<span class="tc none">{i.errors ? 'No cause named yet' : 'No errors recognised in this log'}</span>{/if}
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
       <div class="new">
         <h1>Analyse an incident</h1>
         <p class="muted">Paste the logs from the incident, or drop a log file. Codist finds the errors, maps them to the code, ranks the commits that most likely caused them and asks the local model for the root cause, with evidence. The logs never leave this machine.</p>
@@ -99,6 +119,7 @@
     {/if}
   </main>
 </div>
+<IncidentStage />
 
 <style>
   .incidents { flex: 1; min-height: 0; display: grid; grid-template-columns: 280px minmax(0, 1fr); }
@@ -116,6 +137,16 @@
   .ok { color: var(--good); }
   .bad { color: var(--bad); }
   .content { min-width: 0; min-height: 0; overflow: auto; }
+  .board { max-width: 1060px; margin: 36px auto 0; padding: 0 26px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 14px; }
+  .icard { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--border); background: var(--glass-strong); color: var(--text); text-align: left;
+    box-shadow: var(--elev-1); transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s; }
+  .icard.hot { border-color: color-mix(in srgb, var(--bad) 30%, var(--border)); }
+  .icard:hover { transform: translateY(-2px); box-shadow: var(--elev-2), 0 0 40px -18px color-mix(in srgb, var(--bad) 60%, transparent); border-color: color-mix(in srgb, var(--bad) 50%, var(--border)); }
+  .icard .top { display: flex; align-items: center; gap: 8px; } .icard .time { margin-left: auto; font-size: 11.5px; color: var(--text-3); }
+  .icard b { font-size: 14px; font-weight: 600; line-height: 1.4; }
+  .icard .tc { font-size: 12.5px; color: var(--text-2); line-height: 1.45; } .icard .tc i { display: block; font-style: normal; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 2px; }
+  .icard .tc.none { color: var(--text-3); }
   .new { max-width: 820px; margin: 36px auto 60px; padding: 24px 26px; display: grid; gap: 8px; border-radius: 18px; background: var(--glass); border: 1px solid var(--border); box-shadow: var(--elev-2), var(--glow-soft); }
   h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
   .new p { margin: 0 0 10px; max-width: 70ch; line-height: 1.6; }

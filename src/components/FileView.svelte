@@ -37,6 +37,55 @@
   const ORDER = ['critical', 'high', 'medium', 'low', 'info'];
   const worstAt = (n: number) => (byLine.get(n) ?? []).map((g) => g[0].severity).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b))[0];
   const total = $derived(toks.length || 1);
+  // The minimap's data: the lines changed in the commit being looked at, when the file is shown from one.
+  const changedLines = $derived.by(() => {
+    const out = new Set<number>();
+    if (!f || !app.detail || (f.sha && app.detail.analysis.commit.sha !== f.sha && !app.detail.analysis.commit.sha.startsWith(f.sha))) return out;
+    for (const fc of app.detail.analysis.files) if (fc.path === f.path || fc.newPath === f.path) for (const n of fc.addedLines) out.add(n);
+    return out;
+  });
+  let mini = $state<HTMLDivElement>(), mc = $state<HTMLCanvasElement>();
+  let view = $state({ top: 0, h: 1 });
+  let miniH = $state(600);
+  const mapH = $derived(Math.min(miniH, toks.length * 4));
+  let dragging = false;
+  function track() { if (box) view = { top: box.scrollTop / box.scrollHeight, h: box.clientHeight / box.scrollHeight }; }
+  function seek(e: PointerEvent) {
+    if (!box || !mini) return;
+    const r = mini.getBoundingClientRect(), at = (e.clientY - r.top) / Math.min(r.height, toks.length * 4);
+    box.scrollTop = at * box.scrollHeight - box.clientHeight / 2;
+  }
+  $effect(() => {
+    const lines = toks, c = mc, m = mini, changed = changedLines, flagged = byLine, dark = app.theme !== 'light';
+    if (!c || !m || !lines.length) return;
+    requestAnimationFrame(() => {
+      miniH = m.clientHeight;
+      const W = m.clientWidth, H = m.clientHeight, dpr = Math.min(2, devicePixelRatio || 1);
+      c.width = W * dpr; c.height = H * dpr; c.style.width = W + 'px'; c.style.height = H + 'px';
+      const x = c.getContext('2d')!; x.scale(dpr, dpr); x.clearRect(0, 0, W, H);
+      const step = Math.min(4, H / lines.length), bar = Math.max(1, Math.min(3, step * 0.7)); // short files stay compact at the top
+      lines.forEach((ln, i) => {
+        const y = i * step, n = i + 1;
+        if (changed.has(n)) { x.fillStyle = 'rgba(139,116,255,0.28)'; x.fillRect(0, y, W, Math.max(1, step)); }
+        let col = 6;
+        for (const t of ln) {
+          const w = t.content.length * 0.9;
+          if (t.content.trim()) { x.globalAlpha = 0.55; x.fillStyle = t.color || (dark ? '#8a8798' : '#555'); x.fillRect(col, y, Math.min(w, W - col - 4), bar); }
+          col += w; if (col > W - 6) break;
+        }
+        x.globalAlpha = 1;
+      });
+      // Issues on top, as hot bands with a glow, so they show however long the file is.
+      for (const [n, gs] of flagged) {
+        const sev = gs.map((g) => g[0].severity).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b))[0];
+        const col = getComputedStyle(m).getPropertyValue(`--sev-${sev === 'info' ? 'low' : sev}`).trim() || '#ff8f40';
+        const y = (n - 1) * step;
+        x.fillStyle = col; x.globalAlpha = 0.25; x.fillRect(0, y - 6, W, 12 + step); x.globalAlpha = 1;
+        x.fillRect(0, y - 1, W, Math.max(3, step + 2));
+      }
+    });
+  });
+  $effect(() => { void toks; requestAnimationFrame(track); });
   function jump(n: number) { box?.querySelector(`[data-n="${n}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   function fix(g: Issue[]) {
     const i = g[0];
@@ -63,7 +112,7 @@
       <button class="x" aria-label="Close" onclick={close}>×</button>
     </header>
     <div class="wrapcode">
-    <div class="code mono" bind:this={box}>
+    <div class="code mono" id="file-code" bind:this={box} onscroll={track}>
       {#each toks as line, i}
         {@const n = i + 1}
         {@const sev = worstAt(n)}
@@ -87,11 +136,14 @@
         {/if}
       {/each}
     </div>
-    {#if here.length}
-      <div class="strip" aria-label="Where the issues are">
-        {#each [...byLine.keys()] as n}<button class="tick sev-{worstAt(n)}" style:top="{(n / total) * 100}%" title="line {n}" onclick={() => jump(n)}></button>{/each}
-      </div>
-    {/if}
+    <!-- The minimap: the whole file in miniature, issues as hot bands, the lines this commit changed in violet, and a
+         window showing what is on screen. Click or drag to move. -->
+    <div class="mini" bind:this={mini} role="scrollbar" aria-controls="file-code" aria-valuenow={Math.round(view.top * 100)} tabindex="-1"
+      onpointerdown={(e) => { dragging = true; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); seek(e); }}
+      onpointermove={(e) => dragging && seek(e)} onpointerup={() => (dragging = false)}>
+      <canvas bind:this={mc}></canvas>
+      <div class="view" style:top="{view.top * mapH}px" style:height="{Math.max(6, view.h * mapH)}px"></div>
+    </div>
     </div>
   </div>
 {/if}
@@ -125,8 +177,10 @@
   .sv { font-size: 10.5px; font-weight: 600; text-transform: capitalize; color: var(--c); }
   .inline p { margin: 5px 0 8px; font-size: 12px; line-height: 1.5; color: var(--text-2); }
   .ia { display: flex; gap: 6px; } .ia .b3 { height: 26px; font-size: 11.5px; }
-  .strip { position: relative; width: 12px; flex-shrink: 0; background: var(--code-bg); border-left: 1px solid var(--border); border-radius: 0 0 16px 0; }
-  .tick { position: absolute; left: 2px; right: 2px; height: 4px; border: 0; padding: 0; border-radius: 2px; background: var(--c); box-shadow: 0 0 6px var(--c); cursor: pointer; }
+  .mini { position: relative; width: 72px; flex-shrink: 0; background: var(--code-bg); border-left: 1px solid var(--border); border-radius: 0 0 16px 0; cursor: pointer; touch-action: none; overflow: hidden; }
+  .mini canvas { position: absolute; inset: 0; }
+  .view { position: absolute; left: 0; right: 0; background: color-mix(in srgb, var(--text) 8%, transparent); border-top: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); pointer-events: none; }
+  .wrapcode .code { border-radius: 0 0 0 16px; }
   .hits { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 11.5px; color: var(--text-2); }
   .hit-chip { height: 22px; padding: 0 9px; border-radius: 99px; border: 1px solid color-mix(in srgb, var(--c) 50%, var(--border)); background: none; font: 11px var(--font); color: var(--text); }
 </style>
