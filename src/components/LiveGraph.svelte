@@ -212,7 +212,17 @@
   const hexOn = () => f.hex && !f.three && mods.length > 1;
 
   // The toolbar covers the top of the map and the legend its bottom, so the graph is framed and centred in what is left.
-  const TOP = 96, BOT = 64;
+  // Measured from the toolbar and legend on every resize, since both wrap onto more lines in a narrow window.
+  let TOP = 96, BOT = 64;
+  function insets() {
+    if (!wrap) return;
+    const top = wrap.getBoundingClientRect().top, h = wrap.clientHeight;
+    let t = 0, b = 0;
+    for (const el of wrap.querySelectorAll<HTMLElement>('.hud')) t = Math.max(t, el.getBoundingClientRect().bottom - top);
+    const lg = wrap.querySelector<HTMLElement>('.legend');
+    if (lg) b = h - (lg.getBoundingClientRect().top - top);
+    TOP = Math.max(60, t + 12); BOT = Math.max(20, b + 8);
+  }
   function anchor(m: number) {
     const M = Math.max(1, mods.length), y = M === 1 ? 0 : 1 - (2 * (m + 0.5)) / M, r = Math.sqrt(1 - y * y), a = m * 2.399963;
     const R = 190 + Math.sqrt(nodes.length) * 22; // far enough apart that services do not overlap when turned
@@ -343,7 +353,7 @@
   onMount(() => {
     const ctx = canvas!.getContext('2d')!;
     let W = 0, H = 0, dpr = 1;
-    const size = () => { dpr = Math.min(2, window.devicePixelRatio || 1); W = wrap!.clientWidth; H = wrap!.clientHeight; canvas!.width = W * dpr; canvas!.height = H * dpr; };
+    const size = () => { dpr = Math.min(2, window.devicePixelRatio || 1); W = wrap!.clientWidth; H = wrap!.clientHeight; canvas!.width = W * dpr; canvas!.height = H * dpr; insets(); };
     size();
     const ro = new ResizeObserver(size);
     ro.observe(wrap!);
@@ -603,6 +613,7 @@
 <div class="map" bind:this={wrap}>
   <canvas bind:this={canvas}></canvas>
 
+  <div class="huds">
   <div class="hud tl">
     <div class="row">
       <input placeholder="Find a class…" bind:value={query} onkeydown={(e) => e.key === 'Enter' && find()} spellcheck="false" />
@@ -647,6 +658,7 @@
     </div>
     <button class="b3" onclick={() => fit()} title="Frame everything">Fit</button>
     <button class="b3" class:primary={panel} onclick={() => (panel = !panel)} aria-expanded={panel}>Forces</button>
+  </div>
   </div>
 
   {#if panel}
@@ -764,7 +776,8 @@
 </div>
 
 <style>
-  .map { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--map-bg, var(--canvas)); }
+  .huds { display: contents; }
+  .map { container: map / inline-size; position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--map-bg, var(--canvas)); }
   /* A faint light in the middle of the graph, as if it lit the room. */
   :global(:root:not([data-theme='light'])) .map::before { content: ''; position: absolute; inset: 0; pointer-events: none;
     background: radial-gradient(50% 50% at 50% 50%, rgba(124, 100, 255, 0.13), transparent 72%), radial-gradient(30% 35% at 62% 40%, rgba(90, 150, 255, 0.05), transparent 70%); }
@@ -784,6 +797,13 @@
   .depth button { width: 20px; height: 20px; border: 0; border-radius: 6px; background: var(--surface-2); color: var(--text-3); font-size: 11px; }
   .depth button.on { background: var(--accent); color: #fff; }
   .tr { top: 14px; right: 14px; justify-content: flex-end; }
+  /* A narrow window: the search gets smaller, and the layout and colour controls move to a second row under it. */
+  @container map (max-width: 1180px) { .hud input { width: 170px; } }
+  @container map (max-width: 1000px) {
+    .tr { position: static; justify-content: flex-start; }
+    .tl { position: static; }
+    .huds { position: absolute; z-index: 2; top: 14px; left: 14px; right: 14px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  }
   .hud input { width: 240px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); color: var(--text); background: var(--glass); box-shadow: var(--elev-1); font-size: 13px; }
   .hud input:focus { outline: none; border-color: var(--accent); }
   .facts { display: flex; gap: 12px; font-size: 11.5px; color: var(--text-3); align-items: center; }
