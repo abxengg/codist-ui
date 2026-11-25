@@ -104,6 +104,11 @@
     };
     window.addEventListener('pointermove', onLook);
     let near = 0; // how close the pointer is, for the sphere to brighten
+    // Sparks of light travelling along the honeycomb: each on one line, moving from one end to the other.
+    const sparks = Array.from({ length: size < 40 ? 0 : size < 100 ? 6 : 14 }, () => ({ l: (Math.random() * lines.length) | 0, f: Math.random(), sp: 0.25 + Math.random() * 0.45 }));
+    // The core: soft clouds of light inside the glass, each its own hue, drifting on slow loops.
+    const blobs = [[0, 0.55, 0.9], [1, 0.5, 1.3], [2, 0.45, 0.7], [0, 0.4, 1.7]].map(([hue, r, sp], i) => ({ hue, r, sp, ph: i * 1.7 }));
+    const HUES: [number, number, number][] = [[150, 110, 255], [236, 110, 220], [96, 160, 255]]; // violet, pink, blue
     let rot = 0, t = 0, last = performance.now(), raf = 0;
     const mix = (x: number, y: number, k: number) => x + (y - x) * k;
     const frame = (now: number) => {
@@ -152,6 +157,12 @@
       const lite = (a: number) => `rgba(${Math.min(255, r0 + 90)},${Math.min(255, g0 + 90)},${Math.min(255, b0 + 60)},${a})`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, W);
+      // A soft halo of light around the sphere.
+      if (size >= 24) {
+        const hg = ctx.createRadialGradient(c, c, R * 0.9, c, c, R * 1.45);
+        hg.addColorStop(0, col(0.16 + Math.max(0, breath) * 2 + near * 0.06)); hg.addColorStop(1, col(0));
+        ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(c, c, R * 1.45, 0, Math.PI * 2); ctx.fill();
+      }
       const lw = Math.max(0.5, size / 220);
       // The far side of the honeycomb, faint, seen through the glass.
       ctx.lineWidth = lw;
@@ -186,6 +197,23 @@
       body.addColorStop(0, col(0.04)); body.addColorStop(0.7, col(0.1)); body.addColorStop(1, col(0.38));
       ctx.fillStyle = body;
       ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.fill();
+      // The living core: clouds of violet, pink and blue light drift inside, so the inside is never the same twice.
+      if (size >= 24) {
+        ctx.save();
+        ctx.beginPath(); ctx.arc(c, c, R * 0.98, 0, Math.PI * 2); ctx.clip();
+        ctx.globalCompositeOperation = 'lighter';
+        const glow = 0.16 + 0.12 * Math.max(cur.think, cur.make) + Math.max(0, breath) * 2;
+        for (const b of blobs) {
+          const a1 = t * 0.23 * b.sp + b.ph, a2 = t * 0.17 * b.sp + b.ph * 2;
+          const bx = c + Math.cos(a1) * R * 0.38, by = c + Math.sin(a2) * R * 0.34, br = R * b.r;
+          const [hr, hg, hb] = mood === 'offline' ? [150, 150, 160] : mood === 'alert' ? [255, 150, 70] : HUES[b.hue];
+          const g = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+          g.addColorStop(0, `rgba(${hr},${hg},${hb},${glow})`); g.addColorStop(1, `rgba(${hr},${hg},${hb},0)`);
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+      }
       // The lit cells, on the near side, filled with light.
       cells.forEach((cell, i) => {
         const z = cz(cell);
@@ -207,6 +235,27 @@
         const edge = 1 - z; // lines near the rim read brighter, as on a glass dome
         ctx.strokeStyle = lite(Math.min(0.95, 0.16 + 0.42 * edge + band) * (0.25 + 0.75 * lineFade));
         ctx.beginPath(); ctx.moveTo(sx[a], sy[a]); ctx.lineTo(sx[b], sy[b]); ctx.stroke();
+      }
+      // Sparks travel along the lines on the near side, each with a short glowing tail, then jump to another line.
+      if (sparks.length) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (const sp of sparks) {
+          sp.f += dt * sp.sp * (1 + Math.max(cur.think, cur.make) * 1.5);
+          if (sp.f > 1) { sp.f = 0; sp.l = (Math.random() * lines.length) | 0; }
+          const [a, b] = lines[sp.l];
+          if ((sz[a] + sz[b]) / 2 < 0.05) continue;
+          const x = sx[a] + (sx[b] - sx[a]) * sp.f, y = sy[a] + (sy[b] - sy[a]) * sp.f;
+          const tx = sx[a] + (sx[b] - sx[a]) * Math.max(0, sp.f - 0.35), ty = sy[a] + (sy[b] - sy[a]) * Math.max(0, sp.f - 0.35);
+          const fade = Math.sin(sp.f * Math.PI);
+          const g = ctx.createLinearGradient(tx, ty, x, y);
+          g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, `rgba(235,225,255,${0.85 * fade})`);
+          ctx.strokeStyle = g; ctx.lineWidth = Math.max(1, size / 90);
+          ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(x, y); ctx.stroke();
+          ctx.fillStyle = `rgba(255,255,255,${0.9 * fade})`;
+          ctx.beginPath(); ctx.arc(x, y, Math.max(0.8, size / 110), 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
       }
       // The particles: each point as a small glowing dot, brighter the further it has left its place.
       if (loose > 0.01) {
@@ -249,7 +298,14 @@
       ctx.shadowColor = col(0.9);
       ctx.shadowBlur = Math.max(4, size * (0.12 + cur.pulse * 0.8 + near * 0.12 + Math.max(0, breath) * 2));
       ctx.lineWidth = Math.max(1, size / 70);
-      ctx.strokeStyle = lite(Math.min(1, 0.75 + near * 0.25));
+      // The rim shifts slowly through violet, blue and pink, like the edge of a soap bubble.
+      if (size >= 24 && mood !== 'offline' && mood !== 'alert' && 'createConicGradient' in ctx) {
+        const g = ctx.createConicGradient(t * 0.25, c, c);
+        const a = Math.min(1, 0.8 + near * 0.2);
+        g.addColorStop(0, `rgba(190,165,255,${a})`); g.addColorStop(0.33, `rgba(130,185,255,${a})`);
+        g.addColorStop(0.66, `rgba(245,150,230,${a})`); g.addColorStop(1, `rgba(190,165,255,${a})`);
+        ctx.strokeStyle = g;
+      } else ctx.strokeStyle = lite(Math.min(1, 0.75 + near * 0.25));
       ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
       // Making: rings of light leave the rim and fade as they grow.
