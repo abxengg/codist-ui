@@ -8,7 +8,6 @@
   import Orb from './Orb.svelte';
   import BranchPicker from './BranchPicker.svelte';
   import IssueCard from './IssueCard.svelte';
-  import Pulse from './Pulse.svelte';
 
   const all = $derived(app.issueList?.issues ?? []);
   const open = $derived(groups(all));
@@ -55,8 +54,6 @@
       <div class="stat fl"><b>{fixedWeek}</b><span>fixed this week</span></div>
     </div>
   </section>
-
-  <Pulse />
 
   <div class="cols">
     <section class="block panel fl p1">

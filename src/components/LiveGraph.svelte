@@ -72,15 +72,24 @@
 
   // What the detail panel shows about the picked class.
   type Link = { n: N; kind: string };
-  let details = $state<{ uses: Link[]; usedBy: Link[]; issues: Issue[][]; methods: GraphNode['members']; fields: number } | null>(null);
+  let details = $state<{ uses: Link[]; usedBy: Link[]; usesAll: number; usedByAll: number; issues: Issue[][]; methods: GraphNode['members']; fields: number } | null>(null);
+  // Counted from the whole code graph, so the numbers never depend on what the map shows; the lists hold the classes
+  // on the map, and say how many more there are (tests, or classes filtered out).
   function describe(n: N | null) {
     if (!n) { details = null; return; }
     const uses: Link[] = [], usedBy: Link[] = [];
-    for (const e of edges) { if (e.a === n) uses.push({ n: e.b, kind: LINK[e.kind]?.label ?? e.kind }); if (e.b === n) usedBy.push({ n: e.a, kind: LINK[e.kind]?.label ?? e.kind }); }
+    const here = new Map(nodes.map((x) => [x.id, x]));
+    const seenU = new Set<string>(), seenB = new Set<string>();
+    for (const e of app.graph?.edges ?? []) {
+      if (e.source === e.target) continue;
+      const kind = LINK[e.kind as keyof typeof LINK]?.label ?? e.kind;
+      if (e.source === n.id && !seenU.has(e.target)) { seenU.add(e.target); const o = here.get(e.target); if (o) uses.push({ n: o, kind }); }
+      if (e.target === n.id && !seenB.has(e.source)) { seenB.add(e.source); const o = here.get(e.source); if (o) usedBy.push({ n: o, kind }); }
+    }
     const methods = n.g.members.filter((m) => m.kind !== 'field').sort((a, b) => (b.cost?.complexity ?? 0) - (a.cost?.complexity ?? 0));
-    details = { uses, usedBy, issues: openByFile.get(n.g.file) ?? [], methods, fields: n.g.members.filter((m) => m.kind === 'field').length };
+    details = { uses, usedBy, usesAll: seenU.size, usedByAll: seenB.size, issues: openByFile.get(n.g.file) ?? [], methods, fields: n.g.members.filter((m) => m.kind === 'field').length };
   }
-  $effect(() => { void openByFile; describe(picked); });
+  $effect(() => { void openByFile; void app.graph; describe(picked); });
   $effect(() => { void picked; reach = null; });
   function showReach() {
     if (!picked) return;
@@ -777,8 +786,8 @@
         {#each picked.g.annotations.slice(0, 4) as a}<span class="mono">@{a.replace(/^@/, '')}</span>{/each}
       </div>
       <div class="nums">
-        <div><b>{details.uses.length}</b><span>uses</span></div>
-        <div><b>{details.usedBy.length}</b><span>used by</span></div>
+        <div><b>{details.usesAll}</b><span>uses</span></div>
+        <div><b>{details.usedByAll}</b><span>used by</span></div>
         <div><b>{details.methods.length}</b><span>methods</span></div>
         <div><b>{details.fields}</b><span>fields</span></div>
         <div><b>{picked.lines}</b><span>lines</span></div>
@@ -798,13 +807,15 @@
         <h3>Endpoints</h3>
         <ul class="plain mono">{#each picked.g.endpoints as ep}<li>{ep}</li>{/each}</ul>
       {/if}
-      {#if details.usedBy.length}
+      {#if details.usedByAll}
         <h3>Used by</h3>
         <div class="links">{#each details.usedBy as l}<button onclick={() => focusOn(l.n)}><i style:background={colourOf(l.n)}></i>{l.n.label}<small>{l.kind}</small></button>{/each}</div>
+        {#if details.usedByAll > details.usedBy.length}<p class="more">and {details.usedByAll - details.usedBy.length} not on the map (tests, or filtered out)</p>{/if}
       {/if}
-      {#if details.uses.length}
+      {#if details.usesAll}
         <h3>Uses</h3>
         <div class="links">{#each details.uses as l}<button onclick={() => focusOn(l.n)}><i style:background={colourOf(l.n)}></i>{l.n.label}<small>{l.kind}</small></button>{/each}</div>
+        {#if details.usesAll > details.uses.length}<p class="more">and {details.usesAll - details.uses.length} not on the map (tests, or filtered out)</p>{/if}
       {/if}
       {#if details.methods.length}
         <h3>Methods <small>most complex first</small></h3>
@@ -916,4 +927,5 @@
   .meta dt { color: var(--text-3); } .meta dd { margin: 0; color: var(--text-2); word-break: break-word; }
   .tags .kind { color: var(--text); font-weight: 600; }
   .openf { margin-left: 6px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 6px; padding: 0 7px; font: 11px var(--font); color: var(--accent-text); }
+  .more { margin: 6px 0 0; font-size: 11.5px; color: var(--text-3); }
 </style>
