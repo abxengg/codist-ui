@@ -78,6 +78,15 @@
     const glow = new Float32Array(cells.length); // how lit it is heading to: cells ease towards it, so they fade in and out
     let spawn = 0;
     const P = pts.length, sx = new Float32Array(P), sy = new Float32Array(P), sz = new Float32Array(P);
+    // Each point can leave its place on the sphere: ox, oy is how far it is off now, easing towards where it is sent.
+    const ox = new Float32Array(P), oy = new Float32Array(P), seed = Float32Array.from({ length: P }, () => Math.random());
+    // The pointer over the orb, in canvas pixels; particles near it move aside.
+    let mx = -1e4, my = -1e4;
+    const cv = canvas;
+    const onMove = (e: PointerEvent) => { const r = cv.getBoundingClientRect(); mx = ((e.clientX - r.left) / r.width) * W; my = ((e.clientY - r.top) / r.height) * W; };
+    const onLeave = () => { mx = -1e4; my = -1e4; };
+    cv.addEventListener('pointermove', onMove);
+    cv.addEventListener('pointerleave', onLeave);
     let rot = 0, t = 0, last = performance.now(), raf = 0;
     const mix = (x: number, y: number, k: number) => x + (y - x) * k;
     const frame = (now: number) => {
@@ -96,6 +105,26 @@
         const y2 = y * ct - z1 * st, z2 = y * st + z1 * ct;
         sx[i] = c + x1 * R; sy[i] = c + y2 * R; sz[i] = z2;
       }
+      // Deform and form: while the AI works, the honeycomb loosens every few seconds, its points drifting outward and
+      // swirling into a cloud of particles, then eases back into the sphere. Points near the pointer move aside.
+      const busyNow = Math.max(cur.think, cur.make);
+      const cycle = 0.5 - 0.5 * Math.cos(t * 0.55); // 0 whole, 1 most apart; about 11 seconds a round
+      const apart = busyNow * cycle * cycle;
+      const hoverR = R * 0.55;
+      let loose = 0;
+      for (let i = 0; i < P; i++) {
+        const dx0 = sx[i] - c, dy0 = sy[i] - c, d0 = Math.hypot(dx0, dy0) || 1;
+        const s0 = seed[i], spin = t * (0.4 + s0 * 0.5) + s0 * 6.28;
+        let tx = (dx0 / d0) * R * 0.45 * apart * (0.5 + s0) + Math.cos(spin) * R * 0.16 * apart;
+        let ty = (dy0 / d0) * R * 0.45 * apart * (0.5 + s0) + Math.sin(spin) * R * 0.16 * apart;
+        const hx = sx[i] + ox[i] - mx, hy = sy[i] + oy[i] - my, hd = Math.hypot(hx, hy);
+        if (hd < hoverR && sz[i] > -0.2) { const push = (1 - hd / hoverR) ** 2 * R * 0.35; tx += (hx / (hd || 1)) * push; ty += (hy / (hd || 1)) * push; }
+        const k = Math.min(1, dt * (2.2 + s0));
+        ox[i] += (tx - ox[i]) * k; oy[i] += (ty - oy[i]) * k;
+        sx[i] += ox[i]; sy[i] += oy[i];
+        loose = Math.max(loose, Math.hypot(ox[i], oy[i]) / R);
+      }
+      const lineFade = Math.max(0, 1 - apart * 1.8); // the further it comes apart, the fainter the lines; a hover only moves points
       const [r0, g0, b0] = cur.col.map((v) => v | 0);
       const col = (a: number) => `rgba(${r0},${g0},${b0},${a})`;
       const lite = (a: number) => `rgba(${Math.min(255, r0 + 90)},${Math.min(255, g0 + 90)},${Math.min(255, b0 + 60)},${a})`;
@@ -106,7 +135,7 @@
       ctx.lineWidth = lw;
       ctx.beginPath();
       for (const [a, b] of lines) if (sz[a] + sz[b] < 0) { ctx.moveTo(sx[a], sy[a]); ctx.lineTo(sx[b], sy[b]); }
-      ctx.strokeStyle = col(0.13); ctx.stroke();
+      ctx.strokeStyle = col(0.13 * (0.3 + 0.7 * lineFade)); ctx.stroke();
       // Thinking: cells light at random, mostly on the near side, and fade. Making: rings of cells light outward from
       // the point facing the viewer.
       // Slow and smooth: a few cells at a time start to glow, ease up over about a second and fade over a few.
@@ -154,8 +183,18 @@
         if (z < 0) continue;
         const band = cur.ripple * 5 * Math.max(0, Math.sin((sy[a] / W) * 9 - t * 3.4));
         const edge = 1 - z; // lines near the rim read brighter, as on a glass dome
-        ctx.strokeStyle = lite(Math.min(0.95, 0.16 + 0.42 * edge + band));
+        ctx.strokeStyle = lite(Math.min(0.95, 0.16 + 0.42 * edge + band) * (0.25 + 0.75 * lineFade));
         ctx.beginPath(); ctx.moveTo(sx[a], sy[a]); ctx.lineTo(sx[b], sy[b]); ctx.stroke();
+      }
+      // The particles: each point as a small glowing dot, brighter the further it has left its place.
+      if (loose > 0.01) {
+        for (let i = 0; i < P; i++) {
+          const off = Math.hypot(ox[i], oy[i]) / R, front = (sz[i] + 1) / 2;
+          const a = Math.min(0.9, off * 3.2) * (0.35 + 0.65 * front);
+          if (a < 0.03) continue;
+          ctx.fillStyle = lite(a);
+          ctx.beginPath(); ctx.arc(sx[i], sy[i], Math.max(0.7, size / 120) * (0.8 + front), 0, Math.PI * 2); ctx.fill();
+        }
       }
       // The rim, glowing; brighter and wider while the AI writes or something is found.
       ctx.save();
@@ -187,7 +226,7 @@
     raf = requestAnimationFrame(frame);
     const vis = () => { cancelAnimationFrame(raf); if (!document.hidden && !reduce) { last = performance.now(); raf = requestAnimationFrame(frame); } };
     document.addEventListener('visibilitychange', vis);
-    return () => { cancelAnimationFrame(raf); document.removeEventListener('visibilitychange', vis); };
+    return () => { cancelAnimationFrame(raf); document.removeEventListener('visibilitychange', vis); cv.removeEventListener('pointermove', onMove); cv.removeEventListener('pointerleave', onLeave); };
   });
 </script>
 
@@ -197,5 +236,5 @@
 
 <style>
   .orb { position: relative; flex-shrink: 0; }
-  canvas { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+  canvas { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
 </style>
