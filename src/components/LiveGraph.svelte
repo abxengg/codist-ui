@@ -353,7 +353,9 @@
   onMount(() => {
     const ctx = canvas!.getContext('2d')!;
     let W = 0, H = 0, dpr = 1;
-    const size = () => { dpr = Math.min(2, window.devicePixelRatio || 1); W = wrap!.clientWidth; H = wrap!.clientHeight; canvas!.width = W * dpr; canvas!.height = H * dpr; insets(); };
+    const size = () => { const was = W; dpr = Math.min(2, window.devicePixelRatio || 1); W = wrap!.clientWidth; H = wrap!.clientHeight; canvas!.width = W * dpr; canvas!.height = H * dpr; insets();
+      // Opened while hidden or not yet laid out: frame the graph as soon as there is room to show it.
+      if (!was && W) fit(true); };
     size();
     const ro = new ResizeObserver(size);
     ro.observe(wrap!);
