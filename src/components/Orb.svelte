@@ -109,7 +109,7 @@
       // swirling into a cloud of particles, then eases back into the sphere. Points near the pointer move aside.
       const busyNow = Math.max(cur.think, cur.make);
       const cycle = 0.5 - 0.5 * Math.cos(t * 0.55); // 0 whole, 1 most apart; about 11 seconds a round
-      const apart = busyNow * cycle * cycle;
+      const apart = size >= 60 ? busyNow * cycle * cycle : 0; // a small orb stays whole: particles would only blur it
       const hoverR = R * 0.55;
       let loose = 0;
       for (let i = 0; i < P; i++) {

@@ -160,7 +160,8 @@
   .row.me { justify-content: flex-end; }
   .bubble { max-width: 75%; padding: 10px 14px; border-radius: 16px 16px 4px 16px; background: color-mix(in srgb, var(--accent) 16%, var(--glass-strong)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
     font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .who { flex-shrink: 0; width: 30px; height: 30px; display: grid; place-items: center; margin-top: 2px; }
+  /* The orb lines up with the first line of the answer: 12px padding plus half a 23px line, less half this 30px slot. */
+  .who { flex-shrink: 0; width: 30px; height: 30px; display: grid; place-items: center; margin-top: 9px; }
   .answer { flex: 1; min-width: 0; padding: 12px 16px; border-radius: 4px 16px 16px 16px; background: var(--glass-strong); border: 1px solid var(--border); box-shadow: var(--elev-1); }
   .answer.err { border-color: color-mix(in srgb, var(--bad) 40%, var(--border)); color: var(--text-2); }
   .md { font-size: 14px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }
@@ -176,7 +177,7 @@
   .src:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
   .looked { margin-top: 8px; font-size: 11.5px; color: var(--text-3); }
   .looked button { border: 0; background: none; padding: 0; color: var(--text-2); font-size: 11.5px; text-decoration: underline; text-decoration-color: var(--border-strong); }
-  .thinking { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-3); }
+  .thinking { display: flex; align-items: center; gap: 10px; min-height: 23px; font-size: 13px; color: var(--text-3); }
   .dots { display: inline-flex; gap: 4px; } .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1.2s ease-in-out infinite; }
   .dots i:nth-child(2) { animation-delay: 0.15s; } .dots i:nth-child(3) { animation-delay: 0.3s; }
   @keyframes blink { 50% { opacity: 0.25; transform: translateY(-2px); } }
