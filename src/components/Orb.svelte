@@ -95,6 +95,15 @@
     const onLeave = () => { mx = -1e4; my = -1e4; };
     cv.addEventListener('pointermove', onMove);
     cv.addEventListener('pointerleave', onLeave);
+    // It looks at you: the pointer anywhere on the page turns the sphere a little towards it.
+    let gx = 0, gy = 0, gazeX = 0, gazeY = 0;
+    const onLook = (e: PointerEvent) => {
+      const r = cv.getBoundingClientRect(), cx0 = r.left + r.width / 2, cy0 = r.top + r.height / 2;
+      gx = Math.max(-1, Math.min(1, (e.clientX - cx0) / (window.innerWidth * 0.5)));
+      gy = Math.max(-1, Math.min(1, (e.clientY - cy0) / (window.innerHeight * 0.5)));
+    };
+    window.addEventListener('pointermove', onLook);
+    let near = 0; // how close the pointer is, for the sphere to brighten
     let rot = 0, t = 0, last = performance.now(), raf = 0;
     const mix = (x: number, y: number, k: number) => x + (y - x) * k;
     const frame = (now: number) => {
@@ -105,8 +114,13 @@
       cur.think = mix(cur.think, want.think, k); cur.make = mix(cur.make, want.make, k);
       cur.col = cur.col.map((v, i) => mix(v, want.col[i], k)) as [number, number, number];
       rot += dt * cur.spin * 0.6;
-      const R = size * 0.46 * (1 + Math.sin(t * 2.2) * cur.pulse * 0.25), c = W / 2;
-      const cy = Math.cos(rot), sy0 = Math.sin(rot), tilt = 0.32, ct = Math.cos(tilt), st = Math.sin(tilt);
+      // It breathes: a slow swell all the time, a little deeper while it works.
+      const breath = Math.sin(t * 1.25) * (0.018 + 0.02 * Math.max(cur.think, cur.make));
+      const R = size * 0.46 * (1 + breath + Math.sin(t * 2.2) * cur.pulse * 0.25), c = W / 2;
+      gazeX += (gx - gazeX) * Math.min(1, dt * 2); gazeY += (gy - gazeY) * Math.min(1, dt * 2);
+      near += ((mx > -1e3 ? 1 : 0) - near) * Math.min(1, dt * 4);
+      const yaw = rot + gazeX * 0.6, tilt = 0.32 + gazeY * 0.35;
+      const cy = Math.cos(yaw), sy0 = Math.sin(yaw), ct = Math.cos(tilt), st = Math.sin(tilt);
       for (let i = 0; i < P; i++) {
         const [x, y, z] = pts[i];
         const x1 = x * cy + z * sy0, z1 = -x * sy0 + z * cy;
@@ -151,7 +165,7 @@
         glow[i] *= Math.exp(-dt * 0.55);
         heat[i] += (glow[i] - heat[i]) * Math.min(1, dt * 1.4);
       }
-      spawn += dt * (0.6 + 5 * cur.think);
+      spawn += dt * (0.6 + 5 * cur.think + 6 * near);
       while (spawn > 1) {
         spawn -= 1;
         const i = (Math.random() * cells.length) | 0;
@@ -206,7 +220,7 @@
       }
       // The drifting particles: they fade in while the AI works and out when it rests, rising and falling gently
       // around the sphere, the far ones dimmer, behind the glass.
-      driftOn += ((busyNow > 0.1 ? 1 : 0) - driftOn) * Math.min(1, dt * 0.8);
+      driftOn += ((busyNow > 0.1 ? 1 : 0.35) - driftOn) * Math.min(1, dt * 0.8); // a few float even at rest
       if (driftOn > 0.02) {
         ctx.globalCompositeOperation = 'lighter';
         for (const d of drift) {
@@ -214,12 +228,16 @@
           const ca = Math.cos(ang), sa = Math.sin(ang);
           let [x, y, z] = d.p;
           [x, z] = [x * ca + z * sa, -x * sa + z * ca]; // its own slow orbit around the vertical
-          const h = d.h + Math.sin(t * 0.6 + d.ph) * 0.05;
+          // At rest they float; while it works they stream in towards the sphere and new ones come from outside.
+          const inflow = Math.max(0, driftOn - 0.35) / 0.65;
+          const life = (t * 0.12 * (0.6 + d.sp) + d.ph / 6.28) % 1;
+          const h = (d.h + Math.sin(t * 0.6 + d.ph) * 0.05) * (1 - inflow) + (1.55 - life * 0.55) * inflow;
           x *= h; y *= h; z *= h;
           const x1 = x * cy + z * sy0, z1 = -x * sy0 + z * cy;
           const y2 = y * ct - z1 * st, z2 = y * st + z1 * ct;
           const front = (z2 / h + 1) / 2;
-          const a = driftOn * (0.12 + 0.5 * front) * (0.6 + 0.4 * Math.sin(t * 1.3 + d.ph * 3));
+          const fadeEnds = inflow > 0 ? Math.min(1, Math.sin(life * Math.PI) * 1.6) * inflow + (1 - inflow) : 1;
+          const a = driftOn * fadeEnds * (0.12 + 0.5 * front) * (0.6 + 0.4 * Math.sin(t * 1.3 + d.ph * 3));
           const rad = Math.max(0.6, size / 140) * d.s * (0.7 + front * 0.6);
           ctx.fillStyle = lite(a);
           ctx.beginPath(); ctx.arc(c + x1 * R, c + y2 * R, rad, 0, Math.PI * 2); ctx.fill();
@@ -229,9 +247,9 @@
       // The rim, glowing; brighter and wider while the AI writes or something is found.
       ctx.save();
       ctx.shadowColor = col(0.9);
-      ctx.shadowBlur = Math.max(4, size * (0.12 + cur.pulse * 0.8));
+      ctx.shadowBlur = Math.max(4, size * (0.12 + cur.pulse * 0.8 + near * 0.12 + Math.max(0, breath) * 2));
       ctx.lineWidth = Math.max(1, size / 70);
-      ctx.strokeStyle = lite(0.85);
+      ctx.strokeStyle = lite(Math.min(1, 0.75 + near * 0.25));
       ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
       // Making: rings of light leave the rim and fade as they grow.
@@ -256,7 +274,7 @@
     raf = requestAnimationFrame(frame);
     const vis = () => { cancelAnimationFrame(raf); if (!document.hidden && !reduce) { last = performance.now(); raf = requestAnimationFrame(frame); } };
     document.addEventListener('visibilitychange', vis);
-    return () => { cancelAnimationFrame(raf); document.removeEventListener('visibilitychange', vis); cv.removeEventListener('pointermove', onMove); cv.removeEventListener('pointerleave', onLeave); };
+    return () => { cancelAnimationFrame(raf); document.removeEventListener('visibilitychange', vis); cv.removeEventListener('pointermove', onMove); cv.removeEventListener('pointerleave', onLeave); window.removeEventListener('pointermove', onLook); };
   });
 </script>
 
