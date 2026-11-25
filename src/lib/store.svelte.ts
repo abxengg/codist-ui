@@ -97,6 +97,8 @@ class AppState {
   /** The fix dialog: generating, showing a proposal for approval, or an error. */
   fix = $state.raw<{ finding: FindingWithPath; sha: string; busy: 'generating' | 'applying' | null; proposal: FixProposal | null; error: string | null;
     started?: number; done?: string; issues?: Issue[] } | null>(null);
+  /** Fixes waiting in the background while another is on screen: still being prepared, ready to review, or failed. */
+  fixQueue = $state.raw<NonNullable<AppState['fix']>[]>([]);
   /** The new screens show an opened file over the page rather than in a side panel. */
   fileShown = $state(false);
   /** The fix is being prepared in the background: the window is closed and a bubble shows its progress. */
@@ -591,19 +593,53 @@ export async function requestEdit(instruction: string) {
   }
 }
 
+/** Moves the fix on screen into the background queue, unless it is finished or being applied. */
+function parkFix() {
+  const f = app.fix;
+  if (f && !f.done && f.busy !== 'applying') app.fixQueue = [...app.fixQueue, f];
+  app.fix = null;
+}
+/** Updates a fix wherever it is, on screen or in the queue; says so when one in the background becomes ready. */
+function updateFix(finding: FindingWithPath, patch: Partial<NonNullable<AppState['fix']>>) {
+  if (app.fix?.finding === finding) {
+    app.fix = { ...app.fix, ...patch };
+    if (app.fixHidden && patch.proposal) toast(`Fix ready: ${finding.title}`, 'good', 5000);
+    return;
+  }
+  const i = app.fixQueue.findIndex((q) => q.finding === finding);
+  if (i < 0) { if (patch.proposal) void api.discardFix(patch.proposal.id); return; } // stopped meanwhile
+  app.fixQueue = app.fixQueue.map((q, k) => (k === i ? { ...q, ...patch } : q));
+  if (patch.proposal) toast(`Fix ready: ${finding.title}`, 'good', 5000);
+  if (patch.error) toast(`Fix failed: ${finding.title}`, 'bad', 5000);
+}
+/** Brings a fix from the queue onto the screen, putting the one there into the queue. */
+export function showQueuedFix(i: number) {
+  const f = app.fixQueue[i];
+  if (!f) return;
+  app.fixQueue = app.fixQueue.filter((_, k) => k !== i);
+  parkFix();
+  app.fix = f;
+  app.fixHidden = false;
+}
+/** Drops a fix from the queue; a proposal it already made is thrown away. */
+export function dropQueuedFix(i: number) {
+  const f = app.fixQueue[i];
+  if (f?.proposal) void api.discardFix(f.proposal.id);
+  app.fixQueue = app.fixQueue.filter((_, k) => k !== i);
+}
+
 export async function proposeFix(finding: FindingWithPath, fromSha?: string, also: FixRef[] = [], issues?: Issue[]) {
   const sha = fromSha ?? app.selectedSha;
   if (!sha) return;
+  // A fix already on screen or being prepared is not lost: it waits in the background with its own bubble.
+  parkFix();
   app.fix = { finding, sha, busy: 'generating', proposal: null, error: null, started: Date.now(), issues };
   app.fixHidden = false;
   try {
     const proposal = await api.proposeFix({ sha, path: finding.path, line: finding.line, title: finding.title, also });
-    if (app.fix?.finding === finding) {
-      app.fix = { ...app.fix, busy: null, proposal };
-      if (app.fixHidden) toast(`Fix ready: ${finding.title}`, 'good', 5000);
-    }
+    updateFix(finding, { busy: null, proposal });
   } catch (e) {
-    if (app.fix?.finding === finding) app.fix = { ...app.fix, busy: null, error: (e as Error).message };
+    updateFix(finding, { busy: null, error: (e as Error).message });
   }
 }
 

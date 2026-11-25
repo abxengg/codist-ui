@@ -1,54 +1,36 @@
 <script lang="ts">
   // Chat with the AI about this codebase. Codist picks the classes a question is about and gives the local model their
   // code, the services and the open issues; the answer names the files it used, and each one opens at its line. The
-  // conversation is kept for this repository in the browser, so it survives a reload.
+  // conversation lives in lib/chat.svelte.ts, so it keeps going when you leave the page.
   import { fly, fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { tick } from 'svelte';
   import { app, openFile } from '../lib/store.svelte';
-  import { api } from '../lib/api';
+  import { chat } from '../lib/chat.svelte';
   import { live } from '../lib/live.svelte';
   import Orb from './Orb.svelte';
 
-  type Msg = { role: 'user' | 'assistant'; content: string; sources?: { path: string; line: number }[]; looked?: { path: string; line: number; name: string }[]; took?: number; model?: string; error?: boolean };
-  const KEY = $derived(`codist.chat.${app.status?.repo ?? ''}`);
-  let msgs = $state<Msg[]>([]);
-  let loadedFor = '';
-  $effect(() => {
-    const k = KEY;
-    if (k === loadedFor) return;
-    loadedFor = k;
-    try { msgs = JSON.parse(localStorage.getItem(k) ?? '[]'); } catch { msgs = []; }
-  });
-  $effect(() => { const v = JSON.stringify(msgs.slice(-40)); try { localStorage.setItem(KEY, v); } catch { /* storage blocked */ } });
+  $effect(() => { void app.status?.repo; chat.sync(); });
+  const msgs = $derived(chat.msgs);
+  const busy = $derived(chat.busy);
 
   let text = $state('');
-  let busy = $state(false);
   let list = $state<HTMLDivElement>();
   let input = $state<HTMLTextAreaElement>();
   const offline = $derived(!!app.status?.llmProblem);
 
   async function send(q = text) {
-    q = q.trim();
-    if (!q || busy) return;
-    msgs = [...msgs, { role: 'user', content: q }];
+    if (!q.trim() || busy) return;
     text = '';
-    busy = true;
+    const run = chat.send(q, app.fileShown ? app.file?.path ?? null : null);
     await scroll();
-    try {
-      const r = await api.chat(msgs.filter((m) => !m.error).map((m) => ({ role: m.role, content: m.content })), app.fileShown ? app.file?.path ?? null : null);
-      msgs = [...msgs, { role: 'assistant', content: r.answer, sources: r.sources, looked: r.looked, took: r.took, model: r.model }];
-    } catch (e) {
-      msgs = [...msgs, { role: 'assistant', content: (e as Error).message, error: true }];
-    } finally {
-      busy = false;
-      await scroll();
-      input?.focus();
-    }
+    await run;
+    await scroll();
+    input?.focus();
   }
   async function scroll() { await tick(); list?.scrollTo({ top: list.scrollHeight, behavior: 'smooth' }); }
   function keydown(e: KeyboardEvent) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }
-  function clear() { msgs = []; }
+  function clear() { chat.clear(); }
 
   // Questions to start with, made from this repository: its services, its busiest class and its open issues.
   const starters = $derived.by(() => {

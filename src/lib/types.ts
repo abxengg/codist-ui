@@ -14,6 +14,10 @@ export interface FixProposal {
   branch: string;
   /** Fixes uncommitted changes: applied to the working tree, not committed. */
   working?: boolean;
+  /** How many times the model wrote it: a change that did not compile went back with the compiler's errors. */
+  tries?: number;
+  /** The last try still did not compile. */
+  buildFailed?: boolean;
 }
 
 /** Instant rule checks on the uncommitted changes in the working tree. */

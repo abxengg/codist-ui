@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { chat } from '../lib/chat.svelte';
   // The sidebar: the mark and name, every screen with a live count, and the AI's state at the bottom. It folds to
   // icons only and remembers that.
   import { app, setTheme } from '../lib/store.svelte';
@@ -43,6 +44,7 @@
         <button class="item" class:on={app.mode === it.mode} aria-current={app.mode === it.mode ? 'page' : undefined} onclick={() => (app.mode = it.mode)} title={folded ? it.label : undefined}>
           <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d={it.d} /></svg>
           {#if !folded}<span class="label">{it.label}</span>{/if}
+          {#if it.mode === 'chat' && chat.busy}<i class="thinking" title="The AI is answering"></i>{/if}
           {#if n}<i class="badge" class:dotonly={folded}>{folded ? '' : n > 99 ? '99+' : n}</i>{/if}
         </button>
       {/each}
@@ -98,4 +100,6 @@
   .folded .tools { flex-direction: column; align-items: center; }
   .tb { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--text-3); font: 12px var(--font); }
   .tb:hover { background: var(--hover); color: var(--text); }
+  .thinking { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: think 1.2s ease-in-out infinite; }
+  @keyframes think { 50% { opacity: 0.35; transform: scale(0.7); } }
 </style>

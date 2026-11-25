@@ -1,18 +1,21 @@
 <script lang="ts">
   // The AI as a glass sphere with a honeycomb of fine lines on it, turning slowly: the far side shows faintly through
-  // the glass, the rim glows, and highlights catch the light. Its mood sets colour, pace and glow: offline is grey and
-  // slow, idle turns gently, reading sends a band of light across the lines, writing and alert make the rim flare.
+  // the glass, the rim glows, and highlights catch the light. Its mood shows in what happens inside:
+  //   offline  grey and slow, nothing lights;            idle     turns gently, a cell glints now and then;
+  //   reading  cells flicker alight, a scan line sweeps, the core pulses (it is thinking);
+  //   writing  rings of lit cells spread from the front and light ripples out past the rim (it is making something);
+  //   alert    a warm flare and a burst of cells (it found something).
   import type { Mood } from '../lib/live.svelte';
 
   let { mood = 'idle', size = 160, label = '' }: { mood?: Mood; size?: number; label?: string } = $props();
 
-  type Look = { col: [number, number, number]; spin: number; ripple: number; pulse: number };
+  type Look = { col: [number, number, number]; spin: number; ripple: number; pulse: number; think: number; make: number };
   const LOOKS: Record<Mood, Look> = {
-    offline: { col: [150, 150, 160], spin: 0.08, ripple: 0, pulse: 0 },
-    idle: { col: [140, 112, 255], spin: 0.25, ripple: 0.03, pulse: 0.02 },
-    reading: { col: [96, 165, 255], spin: 0.7, ripple: 0.09, pulse: 0.03 },
-    writing: { col: [168, 120, 255], spin: 0.5, ripple: 0.06, pulse: 0.09 },
-    alert: { col: [255, 146, 64], spin: 1.1, ripple: 0.12, pulse: 0.12 },
+    offline: { col: [150, 150, 160], spin: 0.08, ripple: 0, pulse: 0, think: 0, make: 0 },
+    idle: { col: [140, 112, 255], spin: 0.25, ripple: 0.02, pulse: 0.02, think: 0.06, make: 0 },
+    reading: { col: [96, 165, 255], spin: 0.9, ripple: 0.06, pulse: 0.03, think: 1, make: 0 },
+    writing: { col: [168, 120, 255], spin: 0.6, ripple: 0.03, pulse: 0.08, think: 0.35, make: 1 },
+    alert: { col: [255, 146, 64], spin: 1.2, ripple: 0.08, pulse: 0.12, think: 1, make: 0.6 },
   };
 
   let canvas: HTMLCanvasElement | undefined = $state();
@@ -47,7 +50,18 @@
         if (j === undefined) byEdge.set(k, i); else lines.push([i, j]);
       }
     });
-    return { pts: cen, lines };
+    // The cells: around each corner of the split icosahedron, the centres of the triangles that meet there, in order.
+    const around = new Map<number, number[]>();
+    f.forEach((tri, i) => tri.forEach((x) => around.set(x, [...(around.get(x) ?? []), i])));
+    const cells: { c: number[]; at: number[] }[] = [];
+    for (const [x, fs] of around) {
+      const p = v[x], up = Math.abs(p[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0];
+      const u = norm([up[1] * p[2] - up[2] * p[1], up[2] * p[0] - up[0] * p[2], up[0] * p[1] - up[1] * p[0]]);
+      const w = [p[1] * u[2] - p[2] * u[1], p[2] * u[0] - p[0] * u[2], p[0] * u[1] - p[1] * u[0]];
+      const ang = (i: number) => Math.atan2(cen[i][0] * w[0] + cen[i][1] * w[1] + cen[i][2] * w[2], cen[i][0] * u[0] + cen[i][1] * u[1] + cen[i][2] * u[2]);
+      cells.push({ c: [...fs].sort((a, b) => ang(a) - ang(b)), at: p });
+    }
+    return { pts: cen, lines, cells };
   }
 
   $effect(() => {
@@ -59,7 +73,9 @@
     canvas.width = W * dpr;
     canvas.height = W * dpr;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const { pts, lines } = honeycomb(size < 40 ? 1 : 2);
+    const { pts, lines, cells } = honeycomb(size < 40 ? 1 : 2);
+    const heat = new Float32Array(cells.length); // how lit each cell is, fading
+    let spawn = 0;
     const P = pts.length, sx = new Float32Array(P), sy = new Float32Array(P), sz = new Float32Array(P);
     let rot = 0, t = 0, last = performance.now(), raf = 0;
     const mix = (x: number, y: number, k: number) => x + (y - x) * k;
@@ -68,6 +84,7 @@
       last = now; t += dt;
       const want = LOOKS[mood], k = Math.min(1, dt * 2.5);
       cur.spin = mix(cur.spin, want.spin, k); cur.ripple = mix(cur.ripple, want.ripple, k); cur.pulse = mix(cur.pulse, want.pulse, k);
+      cur.think = mix(cur.think, want.think, k); cur.make = mix(cur.make, want.make, k);
       cur.col = cur.col.map((v, i) => mix(v, want.col[i], k)) as [number, number, number];
       rot += dt * cur.spin * 0.6;
       const R = size * 0.46 * (1 + Math.sin(t * 2.2) * cur.pulse * 0.25), c = W / 2;
@@ -89,11 +106,43 @@
       ctx.beginPath();
       for (const [a, b] of lines) if (sz[a] + sz[b] < 0) { ctx.moveTo(sx[a], sy[a]); ctx.lineTo(sx[b], sy[b]); }
       ctx.strokeStyle = col(0.13); ctx.stroke();
+      // Thinking: cells light at random, mostly on the near side, and fade. Making: rings of cells light outward from
+      // the point facing the viewer.
+      for (let i = 0; i < heat.length; i++) heat[i] *= Math.exp(-dt * 2.6);
+      spawn += dt * (2 + 40 * cur.think);
+      while (spawn > 1) {
+        spawn -= 1;
+        const i = (Math.random() * cells.length) | 0;
+        if (cur.think > 0.02 || Math.random() < 0.08) heat[i] = Math.max(heat[i], 0.5 + Math.random() * 0.5);
+      }
+      const cz = (cell: { at: number[] }) => { const [x, y, z] = cell.at; const z1 = -x * sy0 + z * cy; return y * st + z1 * ct; };
+      // A soft core of light, breathing while the AI works.
+      const busy = Math.max(cur.think, cur.make);
+      if (busy > 0.05) {
+        const core = ctx.createRadialGradient(c, c, 0, c, c, R * 0.9);
+        core.addColorStop(0, col(0.32 * busy * (0.7 + 0.3 * Math.sin(t * 3.1))));
+        core.addColorStop(1, col(0));
+        ctx.fillStyle = core;
+        ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.fill();
+      }
       // The glass: clear in the middle, tinted towards the edge, as light bends through a bubble.
       const body = ctx.createRadialGradient(c - R * 0.25, c - R * 0.3, R * 0.1, c, c, R);
       body.addColorStop(0, col(0.04)); body.addColorStop(0.7, col(0.1)); body.addColorStop(1, col(0.38));
       ctx.fillStyle = body;
       ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.fill();
+      // The lit cells, on the near side, filled with light.
+      cells.forEach((cell, i) => {
+        const z = cz(cell);
+        if (z < 0) return;
+        const wave = cur.make > 0.02 ? cur.make * Math.max(0, Math.sin((1 - z) * 9 - t * 4.2)) ** 3 : 0;
+        const a = Math.min(1, heat[i] * Math.max(cur.think, 0.25) + wave) * (0.25 + 0.75 * z);
+        if (a < 0.03) return;
+        ctx.beginPath();
+        cell.c.forEach((j, k2) => ctx[k2 ? 'lineTo' : 'moveTo'](sx[j], sy[j]));
+        ctx.closePath();
+        ctx.fillStyle = lite(a * 0.55);
+        ctx.fill();
+      });
       // The near side of the honeycomb. Reading sends a band of light across the lines.
       for (const [a, b] of lines) {
         const z = (sz[a] + sz[b]) / 2;
@@ -111,6 +160,23 @@
       ctx.strokeStyle = lite(0.85);
       ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
+      // Reading: a scan line sweeps up and down inside the glass.
+      if (cur.think > 0.05) {
+        const y = c + Math.sin(t * 1.7) * R * 0.85, half = Math.sqrt(Math.max(0, R * R - (y - c) ** 2));
+        const g = ctx.createLinearGradient(c - half, y, c + half, y);
+        g.addColorStop(0, lite(0)); g.addColorStop(0.5, lite(0.7 * cur.think)); g.addColorStop(1, lite(0));
+        ctx.strokeStyle = g; ctx.lineWidth = Math.max(1, size / 90);
+        ctx.beginPath(); ctx.moveTo(c - half, y); ctx.lineTo(c + half, y); ctx.stroke();
+      }
+      // Making: rings of light leave the rim and fade as they grow.
+      if (cur.make > 0.05) {
+        for (let k2 = 0; k2 < 3; k2++) {
+          const ph = (t * 0.55 + k2 / 3) % 1;
+          ctx.strokeStyle = lite(cur.make * 0.45 * (1 - ph));
+          ctx.lineWidth = Math.max(0.8, size / 110) * (1 - ph * 0.6);
+          ctx.beginPath(); ctx.arc(c, c, R * (1.02 + ph * 0.26), 0, Math.PI * 2); ctx.stroke();
+        }
+      }
       // Highlights where the light catches the glass: they stay put while the honeycomb turns under them.
       if (size >= 24) {
         ctx.fillStyle = 'rgba(255,255,255,0.55)';

@@ -7,7 +7,7 @@
   import { tokenize, type Line } from '../lib/highlight';
   import { STEREOTYPE } from '../lib/theme';
   import type { FixCheck } from '../lib/types';
-  import { app, applyFix, closeFix, toast } from '../lib/store.svelte';
+  import { app, applyFix, closeFix, proposeFix, toast } from '../lib/store.svelte';
   import { api } from '../lib/api';
   import CopyButton from './CopyButton.svelte';
 
@@ -71,6 +71,10 @@
   // The model can change plenty and still leave the problem. It can't be proven here, but this can be seen.
   // Every prepared fix is built and tested in a throwaway copy, so you know before you decide.
   let check = $state.raw<FixCheck | 'running' | null>(null);
+  // A fix that does not compile must not be committed by a reflex: Apply stops being the main action, and the
+  // keyboard shortcut does nothing; trying again or committing anyway are explicit choices.
+  const broken = $derived(!!app.fix?.proposal?.buildFailed || (!!check && check !== 'running' && check.status === 'failed' && check.step === 'compile'));
+  function tryAgain() { const f = app.fix; if (f) { const fi = f.finding, sha = f.sha, is = f.issues; closeFix(); void proposeFix(fi, sha, [], is); } }
   let checkedId = '';
   $effect(() => {
     const id = app.fix?.proposal?.id ?? '';
@@ -106,7 +110,7 @@
     if (app.fixHidden) return;
     if (e.key === 'Escape' && app.fix.busy === 'generating') { app.fixHidden = true; return; }
     if (e.key === 'Escape' && app.fix.busy !== 'applying' && !app.fix.done) closeFix();
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && app.fix.proposal && !app.fix.busy) void applyFix(message);
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && app.fix.proposal && !app.fix.busy && !broken) void applyFix(message);
   }
 
   // How long the model has been at it, for the waiting view.
@@ -198,7 +202,7 @@
         <h2>{f.finding.title}</h2>
         <p class="where mono">{f.finding.path.split('/').pop()}{f.finding.line ? ':' + f.finding.line : ''}</p>
         <p class="progress">{phase} · {secs} s{words ? ` · ${words} words written` : ''} · {app.status?.model ?? 'the model'}</p>
-        <p class="hint">Usually 20 to 60 seconds. Keep working: a bubble will say when it is ready.</p>
+        <p class="hint">Usually under a minute. Codist builds the change before showing it, and a change that does not compile goes back to the AI with the errors, which takes longer. Keep working: a bubble will say when it is ready.</p>
         <div class="wbtns">
           <button class="b3 primary" onclick={() => (app.fixHidden = true)}>Keep working</button>
           <button class="b3" onclick={closeFix}>Cancel</button>
@@ -322,11 +326,18 @@
               <button class="b3 primary" onclick={reject}>{reason.trim() ? 'Reject and remember' : 'Reject'}</button>
               <button class="b3 ghost" onclick={() => (rejecting = false)}>Back</button>
             {:else}
-              <button class="b3 primary" disabled={!!f.busy || (!f.proposal.working && !message.trim())} onclick={() => applyFix(message)}>
-                {f.busy === 'applying' ? 'Applying…' : f.proposal.working ? 'Apply' : 'Apply and commit'}
-              </button>
+              {#if broken}
+                <p class="broken">This change does not compile{(f.proposal.tries ?? 1) > 1 ? `, after ${f.proposal.tries} tries` : ''}. Committing it would break the build.</p>
+                <button class="b3 primary" disabled={!!f.busy} onclick={tryAgain}>Try again</button>
+                <button class="b3" disabled={!!f.busy || (!f.proposal.working && !message.trim())} onclick={() => applyFix(message)}>{f.busy === 'applying' ? 'Applying…' : 'Commit anyway'}</button>
+              {:else}
+                <button class="b3 primary" disabled={!!f.busy || (!f.proposal.working && !message.trim())} onclick={() => applyFix(message)}>
+                  {f.busy === 'applying' ? 'Applying…' : f.proposal.working ? 'Apply' : 'Apply and commit'}
+                </button>
+              {/if}
+              {#if (f.proposal.tries ?? 1) > 1 && !broken}<p class="tries">Took {f.proposal.tries} tries: the AI's earlier change did not compile, so it was given the compiler's errors.</p>{/if}
               <button class="b3" disabled={f.busy === 'applying'} onclick={() => (rejecting = true)}>Reject…</button>
-              <p class="keys">⌘↵ to {f.proposal.working ? 'apply' : 'commit'} · Esc to discard</p>
+              <p class="keys">{broken ? 'Esc to discard' : `⌘↵ to ${f.proposal.working ? 'apply' : 'commit'} · Esc to discard`}</p>
             {/if}
           </div>
         </aside>
@@ -397,6 +408,8 @@
   .note pre { margin: 8px 0 0; max-height: 140px; overflow: auto; font-size: 11px; color: var(--text-2); white-space: pre-wrap; }
   .ok { color: var(--good) !important; } .bad { color: var(--bad) !important; }
   .n-check.passed { border-color: color-mix(in srgb, var(--good) 45%, var(--border)); box-shadow: var(--elev-2), 0 0 40px -16px color-mix(in srgb, var(--good) 60%, transparent); }
+  .broken { margin: 0 0 4px; font-size: 12.5px; line-height: 1.5; color: var(--bad); }
+  .tries { margin: 4px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--text-3); }
   .n-check.failed { border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
   .warnc { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
   .spin { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; border: 1.5px solid var(--text-3); border-top-color: var(--accent); animation: rot 0.8s linear infinite; vertical-align: -1px; }
