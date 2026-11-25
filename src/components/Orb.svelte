@@ -1,10 +1,10 @@
 <script lang="ts">
-  // The AI as a glass sphere with a honeycomb of fine lines on it, turning slowly: the far side shows faintly through
-  // the glass, the rim glows, and highlights catch the light. Its mood shows in what happens inside:
-  //   offline  grey and slow, nothing lights;            idle     turns gently, a cell glints now and then;
-  //   reading  cells slowly glow and fade, the core breathes (it is thinking);
-  //   writing  rings of lit cells spread from the front and light ripples out past the rim (it is making something);
-  //   alert    a warm flare and a burst of cells (it found something).
+  // The AI as a sphere of particles: points strung along a geodesic honeycomb, so close up it is hexagons made of
+  // dots and from afar a glowing shell, brighter at the rim, its surface rippling. Its mood shows in the motion:
+  //   offline  grey, slow and still;          idle     a calm shimmer;
+  //   reading  deeper, faster ripples and a breathing glow inside (it is thinking);
+  //   writing  the surface swells, and a big orb comes apart into a cloud and forms again (it is making something);
+  //   alert    warm and restless (it found something). The pointer pushes particles aside.
   import type { Mood } from '../lib/live.svelte';
 
   let { mood = 'idle', size = 160, label = '' }: { mood?: Mood; size?: number; label?: string } = $props();
@@ -73,14 +73,24 @@
     canvas.width = W * dpr;
     canvas.height = W * dpr;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const { pts, lines, cells } = honeycomb(size < 40 ? 1 : 2);
-    const heat = new Float32Array(cells.length); // how lit each cell is now
-    const glow = new Float32Array(cells.length); // how lit it is heading to: cells ease towards it, so they fade in and out
-    let spawn = 0;
-    const P = pts.length, sx = new Float32Array(P), sy = new Float32Array(P), sz = new Float32Array(P);
-    // Each point can leave its place on the sphere: ox, oy is how far it is off now, easing towards where it is sent.
-    const ox = new Float32Array(P), oy = new Float32Array(P), seed = Float32Array.from({ length: P }, () => Math.random());
-    // The pointer over the orb, in canvas pixels; particles near it move aside.
+    // The particles: points strung along the lines of a geodesic honeycomb, so close up the sphere is hexagons made
+    // of dots, and from afar a glowing cloud; plus a sparse dust over the whole surface. Fewer for a small orb.
+    const { pts, lines } = honeycomb(size < 40 ? 1 : 2);
+    const per = size < 40 ? 4 : size < 100 ? 6 : 9;
+    const dust = size < 40 ? 60 : size < 100 ? 260 : 700;
+    const P = lines.length * per + dust;
+    const px = new Float32Array(P), py = new Float32Array(P), pz = new Float32Array(P), seed = new Float32Array(P);
+    let n = 0;
+    const put = (x: number, y: number, z: number) => { const l = Math.hypot(x, y, z) || 1; px[n] = x / l; py[n] = y / l; pz[n] = z / l; seed[n] = Math.random(); n++; };
+    for (const [a, b] of lines) for (let k = 0; k < per; k++) {
+      const f = (k + Math.random() * 0.6) / per, j = 0.012;
+      put(pts[a][0] + (pts[b][0] - pts[a][0]) * f + (Math.random() - 0.5) * j, pts[a][1] + (pts[b][1] - pts[a][1]) * f + (Math.random() - 0.5) * j, pts[a][2] + (pts[b][2] - pts[a][2]) * f + (Math.random() - 0.5) * j);
+    }
+    for (let i = 0; i < dust; i++) { const y = 1 - (2 * (i + 0.5)) / dust, r = Math.sqrt(1 - y * y), a = i * 2.399963; put(Math.cos(a) * r, y, Math.sin(a) * r); }
+    // Where each particle is pushed off its place (while working, and under the pointer), easing back.
+    const ox = new Float32Array(P), oy = new Float32Array(P);
+    // A few waves over the surface, in fixed directions, make it ripple like something alive.
+    const waves = [[0.8, 0.5, 0.33, 5.0, 1.1], [-0.4, 0.9, 0.2, 7.0, -1.4], [0.3, -0.2, 0.93, 9.0, 0.8], [-0.7, -0.6, 0.38, 13.0, 1.9]];
     let mx = -1e4, my = -1e4;
     const cv = canvas;
     const onMove = (e: PointerEvent) => { const r = cv.getBoundingClientRect(); mx = ((e.clientX - r.left) / r.width) * W; my = ((e.clientY - r.top) / r.height) * W; };
@@ -96,131 +106,54 @@
       cur.spin = mix(cur.spin, want.spin, k); cur.ripple = mix(cur.ripple, want.ripple, k); cur.pulse = mix(cur.pulse, want.pulse, k);
       cur.think = mix(cur.think, want.think, k); cur.make = mix(cur.make, want.make, k);
       cur.col = cur.col.map((v, i) => mix(v, want.col[i], k)) as [number, number, number];
-      rot += dt * cur.spin * 0.6;
-      const R = size * 0.46 * (1 + Math.sin(t * 2.2) * cur.pulse * 0.25), c = W / 2;
+      rot += dt * cur.spin * 0.5;
+      const busy = Math.max(cur.think, cur.make);
+      const R = size * 0.44 * (1 + Math.sin(t * 2.2) * cur.pulse * 0.2), c = W / 2;
       const cy = Math.cos(rot), sy0 = Math.sin(rot), tilt = 0.32, ct = Math.cos(tilt), st = Math.sin(tilt);
-      for (let i = 0; i < P; i++) {
-        const [x, y, z] = pts[i];
-        const x1 = x * cy + z * sy0, z1 = -x * sy0 + z * cy;
-        const y2 = y * ct - z1 * st, z2 = y * st + z1 * ct;
-        sx[i] = c + x1 * R; sy[i] = c + y2 * R; sz[i] = z2;
-      }
-      // Deform and form: while the AI works, the honeycomb loosens every few seconds, its points drifting outward and
-      // swirling into a cloud of particles, then eases back into the sphere. Points near the pointer move aside.
-      const busyNow = Math.max(cur.think, cur.make);
-      const cycle = 0.5 - 0.5 * Math.cos(t * 0.55); // 0 whole, 1 most apart; about 11 seconds a round
-      const apart = size >= 60 ? busyNow * cycle * cycle : 0; // a small orb stays whole: particles would only blur it
-      const hoverR = R * 0.55;
-      let loose = 0;
-      for (let i = 0; i < P; i++) {
-        const dx0 = sx[i] - c, dy0 = sy[i] - c, d0 = Math.hypot(dx0, dy0) || 1;
-        const s0 = seed[i], spin = t * (0.4 + s0 * 0.5) + s0 * 6.28;
-        let tx = (dx0 / d0) * R * 0.45 * apart * (0.5 + s0) + Math.cos(spin) * R * 0.16 * apart;
-        let ty = (dy0 / d0) * R * 0.45 * apart * (0.5 + s0) + Math.sin(spin) * R * 0.16 * apart;
-        const hx = sx[i] + ox[i] - mx, hy = sy[i] + oy[i] - my, hd = Math.hypot(hx, hy);
-        if (hd < hoverR && sz[i] > -0.2) { const push = (1 - hd / hoverR) ** 2 * R * 0.35; tx += (hx / (hd || 1)) * push; ty += (hy / (hd || 1)) * push; }
-        const k = Math.min(1, dt * (2.2 + s0));
-        ox[i] += (tx - ox[i]) * k; oy[i] += (ty - oy[i]) * k;
-        sx[i] += ox[i]; sy[i] += oy[i];
-        loose = Math.max(loose, Math.hypot(ox[i], oy[i]) / R);
-      }
-      const lineFade = Math.max(0, 1 - apart * 1.8); // the further it comes apart, the fainter the lines; a hover only moves points
+      // How rough the surface is: a calm shimmer when idle, deeper and faster waves while working.
+      const amp = 0.025 + cur.ripple * 0.5 + cur.make * 0.04, speed = 0.6 + busy * 1.4;
+      // Big orbs come apart into a looser cloud and form again every few seconds while the AI works.
+      const cycle = 0.5 - 0.5 * Math.cos(t * 0.55);
+      const apart = size >= 60 ? busy * cycle * cycle : 0;
       const [r0, g0, b0] = cur.col.map((v) => v | 0);
-      const col = (a: number) => `rgba(${r0},${g0},${b0},${a})`;
-      const lite = (a: number) => `rgba(${Math.min(255, r0 + 90)},${Math.min(255, g0 + 90)},${Math.min(255, b0 + 60)},${a})`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, W);
-      const lw = Math.max(0.5, size / 220);
-      // The far side of the honeycomb, faint, seen through the glass.
-      ctx.lineWidth = lw;
-      ctx.beginPath();
-      for (const [a, b] of lines) if (sz[a] + sz[b] < 0) { ctx.moveTo(sx[a], sy[a]); ctx.lineTo(sx[b], sy[b]); }
-      ctx.strokeStyle = col(0.13 * (0.3 + 0.7 * lineFade)); ctx.stroke();
-      // Thinking: cells light at random, mostly on the near side, and fade. Making: rings of cells light outward from
-      // the point facing the viewer.
-      // Slow and smooth: a few cells at a time start to glow, ease up over about a second and fade over a few.
-      for (let i = 0; i < heat.length; i++) {
-        glow[i] *= Math.exp(-dt * 0.55);
-        heat[i] += (glow[i] - heat[i]) * Math.min(1, dt * 1.4);
+      // A faint glow inside, breathing while it works.
+      const core = ctx.createRadialGradient(c, c, 0, c, c, R * 1.1);
+      core.addColorStop(0, `rgba(${r0},${g0},${b0},${0.1 + 0.18 * busy * (0.7 + 0.3 * Math.sin(t * 2.6))})`);
+      core.addColorStop(1, `rgba(${r0},${g0},${b0},0)`);
+      ctx.fillStyle = core; ctx.beginPath(); ctx.arc(c, c, R * 1.1, 0, Math.PI * 2); ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      const dot = Math.max(0.6, size / 150);
+      const hoverR = R * 0.55;
+      for (let i = 0; i < P; i++) {
+        let x = px[i], y = py[i], z = pz[i];
+        let rr = 1;
+        for (const [wx, wy, wz, f, sp] of waves) rr += amp * Math.sin((x * wx + y * wy + z * wz) * f + t * sp * speed) * 0.5;
+        rr += apart * (0.25 + seed[i] * 0.55);
+        x *= rr; y *= rr; z *= rr;
+        const x1 = x * cy + z * sy0, z1 = -x * sy0 + z * cy;
+        const y2 = y * ct - z1 * st, z2 = y * st + z1 * ct;
+        let sx = c + x1 * R, sy = c + y2 * R;
+        // The pointer pushes nearby particles aside; they ease back when it leaves.
+        let tx = 0, ty = 0;
+        const hx = sx + ox[i] - mx, hy = sy + oy[i] - my, hd = Math.hypot(hx, hy);
+        if (hd < hoverR) { const push = (1 - hd / hoverR) ** 2 * R * 0.4; tx = (hx / (hd || 1)) * push; ty = (hy / (hd || 1)) * push; }
+        const kk = Math.min(1, dt * (2 + seed[i] * 2));
+        ox[i] += (tx - ox[i]) * kk; oy[i] += (ty - oy[i]) * kk;
+        sx += ox[i]; sy += oy[i];
+        // Brighter towards the rim and in front, as in a shell of light; the dust is fainter than the honeycomb.
+        const rim = 1 - Math.min(1, Math.abs(z2 / rr)), front = (z2 / rr + 1) / 2;
+        let a = (0.1 + 0.55 * rim * rim + 0.25 * front) * (i < lines.length * per ? 1 : 0.45);
+        // A few particles sparkle.
+        const tw = seed[i] > 0.985 ? 0.6 + 0.4 * Math.sin(t * 3 + seed[i] * 50) : 0;
+        a = Math.min(1, a + tw);
+        if (a < 0.03) continue;
+        const sz = dot * (0.7 + front * 0.8 + tw * 1.2);
+        ctx.fillStyle = tw > 0.2 ? `rgba(255,255,255,${a})` : `rgba(${Math.min(255, r0 + 70 * rim)},${Math.min(255, g0 + 70 * rim)},${Math.min(255, b0 + 40 * rim)},${a})`;
+        ctx.fillRect(sx - sz / 2, sy - sz / 2, sz, sz);
       }
-      spawn += dt * (0.6 + 5 * cur.think);
-      while (spawn > 1) {
-        spawn -= 1;
-        const i = (Math.random() * cells.length) | 0;
-        if (cur.think > 0.02 || Math.random() < 0.15) glow[i] = Math.max(glow[i], 0.55 + Math.random() * 0.45);
-      }
-      const cz = (cell: { at: number[] }) => { const [x, y, z] = cell.at; const z1 = -x * sy0 + z * cy; return y * st + z1 * ct; };
-      // A soft core of light, breathing while the AI works.
-      const busy = Math.max(cur.think, cur.make);
-      if (busy > 0.05) {
-        const core = ctx.createRadialGradient(c, c, 0, c, c, R * 0.9);
-        core.addColorStop(0, col(0.32 * busy * (0.7 + 0.3 * Math.sin(t * 3.1))));
-        core.addColorStop(1, col(0));
-        ctx.fillStyle = core;
-        ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.fill();
-      }
-      // The glass: clear in the middle, tinted towards the edge, as light bends through a bubble.
-      const body = ctx.createRadialGradient(c - R * 0.25, c - R * 0.3, R * 0.1, c, c, R);
-      body.addColorStop(0, col(0.04)); body.addColorStop(0.7, col(0.1)); body.addColorStop(1, col(0.38));
-      ctx.fillStyle = body;
-      ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.fill();
-      // The lit cells, on the near side, filled with light.
-      cells.forEach((cell, i) => {
-        const z = cz(cell);
-        if (z < 0) return;
-        const wave = cur.make > 0.02 ? cur.make * Math.max(0, Math.sin((1 - z) * 9 - t * 4.2)) ** 3 : 0;
-        const a = Math.min(1, heat[i] * Math.max(cur.think, 0.25) + wave) * (0.25 + 0.75 * z);
-        if (a < 0.03) return;
-        ctx.beginPath();
-        cell.c.forEach((j, k2) => ctx[k2 ? 'lineTo' : 'moveTo'](sx[j], sy[j]));
-        ctx.closePath();
-        ctx.fillStyle = lite(a * 0.55);
-        ctx.fill();
-      });
-      // The near side of the honeycomb. Reading sends a band of light across the lines.
-      for (const [a, b] of lines) {
-        const z = (sz[a] + sz[b]) / 2;
-        if (z < 0) continue;
-        const band = cur.ripple * 5 * Math.max(0, Math.sin((sy[a] / W) * 9 - t * 3.4));
-        const edge = 1 - z; // lines near the rim read brighter, as on a glass dome
-        ctx.strokeStyle = lite(Math.min(0.95, 0.16 + 0.42 * edge + band) * (0.25 + 0.75 * lineFade));
-        ctx.beginPath(); ctx.moveTo(sx[a], sy[a]); ctx.lineTo(sx[b], sy[b]); ctx.stroke();
-      }
-      // The particles: each point as a small glowing dot, brighter the further it has left its place.
-      if (loose > 0.01) {
-        for (let i = 0; i < P; i++) {
-          const off = Math.hypot(ox[i], oy[i]) / R, front = (sz[i] + 1) / 2;
-          const a = Math.min(0.9, off * 3.2) * (0.35 + 0.65 * front);
-          if (a < 0.03) continue;
-          ctx.fillStyle = lite(a);
-          ctx.beginPath(); ctx.arc(sx[i], sy[i], Math.max(0.7, size / 120) * (0.8 + front), 0, Math.PI * 2); ctx.fill();
-        }
-      }
-      // The rim, glowing; brighter and wider while the AI writes or something is found.
-      ctx.save();
-      ctx.shadowColor = col(0.9);
-      ctx.shadowBlur = Math.max(4, size * (0.12 + cur.pulse * 0.8));
-      ctx.lineWidth = Math.max(1, size / 70);
-      ctx.strokeStyle = lite(0.85);
-      ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.stroke();
-      ctx.restore();
-      // Making: rings of light leave the rim and fade as they grow.
-      if (cur.make > 0.05) {
-        for (let k2 = 0; k2 < 3; k2++) {
-          const ph = (t * 0.55 + k2 / 3) % 1;
-          ctx.strokeStyle = lite(cur.make * 0.45 * (1 - ph));
-          ctx.lineWidth = Math.max(0.8, size / 110) * (1 - ph * 0.6);
-          ctx.beginPath(); ctx.arc(c, c, R * (1.02 + ph * 0.26), 0, Math.PI * 2); ctx.stroke();
-        }
-      }
-      // Highlights where the light catches the glass: they stay put while the honeycomb turns under them.
-      if (size >= 24) {
-        ctx.fillStyle = 'rgba(255,255,255,0.55)';
-        ctx.beginPath(); ctx.ellipse(c - R * 0.42, c - R * 0.45, R * 0.17, R * 0.07, -0.7, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.35)';
-        ctx.beginPath(); ctx.ellipse(c + R * 0.5, c - R * 0.3, R * 0.06, R * 0.025, 0.9, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(c + R * 0.38, c + R * 0.55, R * 0.05, R * 0.02, -0.5, 0, Math.PI * 2); ctx.fill();
-      }
+      ctx.globalCompositeOperation = 'source-over';
       if (!reduce) raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
