@@ -6,6 +6,7 @@
   import { app, api_feedback, issueAction, openFile, proposeFix, selectCommit } from '../lib/store.svelte';
   import { ago, INSTANT_REFS } from '../lib/theme';
   import CodePeek from './CodePeek.svelte';
+  import FixCompare from './FixCompare.svelte';
   import type { FindingWithPath, FixRef, Issue } from '../lib/types';
 
   // The issue on show. It stays set while the view animates away, so the closing animation has something to show.
@@ -76,7 +77,7 @@
     <defs><marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" /></marker></defs>
     {#each paths as p (p.key)}<path class="wire" d={p.d} marker-end="url(#arrowhead)" />{/each}
   </svg>
-  <div class="stage sev-{i.severity}" bind:this={stage} role="dialog" aria-modal="true" aria-label={i.title}>
+  <div class="stage sev-{i.severity}" class:fixed={i.state === 'resolved'} bind:this={stage} role="dialog" aria-modal="true" aria-label={i.title}>
     <header class="title float f1" transition:fly|global={{ y: -16, duration: 300, easing: cubicOut }}>
       <span class="badge">{SEV[i.severity]}</span>
       {#if i.source === 'llm'}<span class="src ai">Found by AI</span>{:else}<span class="src">Code check{i.ref ? ` · ${i.ref}` : ''}</span>{/if}
@@ -84,9 +85,9 @@
       <button class="x" aria-label="Close" onclick={close}>×</button>
     </header>
 
-    <section class="code" transition:scale|global={{ start: 0.94, opacity: 0, duration: 320, easing: cubicOut }}>
+    <section class="code" class:wide={i.state === 'resolved'} transition:scale|global={{ start: 0.94, opacity: 0, duration: 320, easing: cubicOut }}>
       <div class="path mono">{i.path}<b>:{i.line}</b></div>
-      <CodePeek path={i.path} {sha} line={i.reviewLine || i.line} around={9} />
+      {#if i.state === 'resolved'}<FixCompare issue={i} />{:else}<CodePeek path={i.path} {sha} line={i.reviewLine || i.line} around={9} />{/if}
     </section>
 
     <aside class="left">
@@ -97,7 +98,7 @@
         <h3>Where it came from</h3>
         {#if i.firstSeen === 'baseline'}<p>Already in the code when Codist first ran.</p>
         {:else if i.firstSeen && i.firstSeen !== 'working'}
-          <p><button class="link mono" onclick={openCommit}>{i.firstSeen.slice(0, 7)}</button>{#if i.firstBy} by {i.firstBy}{/if}{#if i.firstTime}, {ago(i.firstTime)}{/if}</p>
+          <p><button class="link mono" onclick={openCommit}>{i.firstSeen.slice(0, 7)}</button>{#if i.firstBy}{' '}by {i.firstBy}{/if}{#if i.firstTime}, {ago(i.firstTime)}{/if}</p>
           {#if i.firstMsg}<p class="quote">“{i.firstMsg}”</p>{/if}
         {:else}<p>In your uncommitted changes.</p>{/if}
       </div>
@@ -157,6 +158,8 @@
   .code { grid-column: 2; grid-row: 2; align-self: center; border-radius: 16px; padding: 12px; background: var(--glass-strong);
     border: 1px solid color-mix(in srgb, var(--c) 45%, var(--border)); box-shadow: var(--elev-2), 0 0 0 1px rgba(0, 0, 0, 0.2), 0 0 90px -20px color-mix(in srgb, var(--c) 55%, transparent); }
   .code :global(.peek) { font-size: 13px; }
+  /* A fixed issue shows its fix side by side, so the middle is wider and the code glows green. */
+  .stage.fixed { grid-template-columns: minmax(200px, 260px) minmax(0, 940px) minmax(200px, 260px); --c: var(--good); }
   .path { font-size: 12px; color: var(--text-3); padding: 2px 4px 10px; word-break: break-all; } .path b { color: var(--text); font-weight: 600; }
   .left { grid-column: 1; grid-row: 2; align-self: center; display: flex; flex-direction: column; gap: 16px; }
   .right { grid-column: 3; grid-row: 2; align-self: center; display: flex; flex-direction: column; gap: 16px; }
