@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ModelPull from './ModelPull.svelte';
   // The home screen. One look answers: what is the AI doing, is anything wrong, and what changed. No clicks needed;
   // every row opens in place.
   import { app, selectCommit } from '../lib/store.svelte';
@@ -40,12 +41,15 @@
     <p class="sub">
       {#if live.call?.status === 'running'}
         {live.call.sha ? live.call.sha.slice(0, 7) + ' · ' : ''}{mm(elapsed)}{live.call.replyTokens ? ` · ${live.call.replyTokens} words written` : ''}
+      {:else if app.status?.canPull}
+        Code checks are running. The AI needs its model before it can read your commits.
       {:else if app.status?.llmProblem}
         {app.status.llmProblem}
       {:else}
         {greet}{app.status?.user ? `, ${app.status.user.split(' ')[0]}` : ''}. Watching <b>{app.status?.repo ?? 'your code'}</b> on {app.status?.branch ?? 'this branch'}.
       {/if}
     </p>
+    <ModelPull />
     <div class="stats">
       <button class="stat fl" onclick={() => (app.mode = 'issues')}><b>{open.length}</b><span>open issues</span></button>
       <button class="stat fl" onclick={() => { app.foundBy = 'llm'; app.mode = 'issues'; }}><b class="grad">{ai}</b><span>found by AI</span></button>

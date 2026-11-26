@@ -1,6 +1,6 @@
 import { api, cancelAI } from './api';
 import { cycles, layerViolations, metrics } from './graphAnalysis';
-import type { FixRef, Working, AskMessage, CommitItem, Detail, FindingWithPath, FixProposal, Graph, IgnoreScope, Incident, Issue, IssueList, IncidentRow, Mode, OpenFile, Severity, Status, Tab, Flags } from './types';
+import type { FixRef, Working, AskMessage, CommitItem, Detail, FindingWithPath, FixProposal, Graph, IgnoreScope, Incident, Issue, IssueList, IncidentRow, Mode, OpenFile, Severity, Status, Tab, Flags, PullState } from './types';
 
 export interface Toast {
   id: number;
@@ -768,6 +768,9 @@ export function selectNode(id: string | null) {
   void openFile(node.file, fileInCommit(node.file) ? app.selectedSha : null, node.startLine, false);
 }
 
+/** The model download, kept here so it survives switching screens. */
+export const pull = $state<{ state: PullState | null }>({ state: null });
+
 export function connect() {
   const es = new EventSource('/api/events');
   es.addEventListener('hello', () => (app.live = true));
@@ -817,6 +820,11 @@ export function connect() {
   // The server learned something new about the repository, such as the risk model.
   es.addEventListener('status', async () => {
     await Promise.all([loadStatus(), loadCommits()]);
+  });
+
+  es.addEventListener('pull', (e) => {
+    pull.state = JSON.parse((e as MessageEvent).data) as PullState;
+    if (pull.state.done) { void loadStatus(); toast(`${app.status?.model ?? 'The model'} is ready; the AI starts reviewing`, 'good'); }
   });
 
   es.addEventListener('behaviour', async (e) => {

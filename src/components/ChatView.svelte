@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ModelPull from './ModelPull.svelte';
   // Chat with the AI about this codebase. Codist picks the classes a question is about and gives the local model their
   // code, the services and the open issues; the answer names the files it used, and each one opens at its line. The
   // conversation lives in lib/chat.svelte.ts, so it keeps going when you leave the page.
@@ -128,6 +129,7 @@
   </div>
 
   <div class="composer">
+    <ModelPull compact />
     <div class="box" class:off={offline}>
       <textarea bind:this={input} bind:value={text} onkeydown={keydown} rows="1" placeholder={offline ? 'Chat needs the AI model, which is offline' : 'Ask about a class, a flow, an endpoint or an issue…'} disabled={offline}></textarea>
       <button class="send" onclick={() => send()} disabled={!text.trim() || busy || offline} aria-label="Send">

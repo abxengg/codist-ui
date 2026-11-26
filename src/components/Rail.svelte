@@ -13,17 +13,24 @@
   $effect(() => { try { localStorage.setItem('codist.railFolded', folded ? '1' : '0'); } catch { /* storage blocked */ } });
   $effect(() => { void folded; requestAnimationFrame(() => window.dispatchEvent(new Event('codist:resize'))); });
 
-  const ITEMS: { mode: Mode; label: string; d: string; group: 'work' | 'see' }[] = [
-    { mode: 'now', label: 'Now', group: 'work', d: 'M8 3.2a4.8 4.8 0 1 0 0 9.6 4.8 4.8 0 0 0 0-9.6ZM8 6.2a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6Z' },
-    { mode: 'issues', label: 'Issues', group: 'work', d: 'M8 2.2 13.8 5v3.4c0 3-2.4 4.9-5.8 5.9-3.4-1-5.8-2.9-5.8-5.9V5L8 2.2ZM8 5.4v3.4M8 10.6v.1' },
-    { mode: 'commits', label: 'Commits', group: 'work', d: 'M8 1.8v3.4M8 10.8v3.4M8 5.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6Z' },
-    { mode: 'chat', label: 'Chat', group: 'work', d: 'M2.5 4.2A1.7 1.7 0 0 1 4.2 2.5h7.6a1.7 1.7 0 0 1 1.7 1.7v5a1.7 1.7 0 0 1-1.7 1.7H7l-3 2.6v-2.6h0A1.7 1.7 0 0 1 2.5 9.2v-5ZM5.5 6.7h5' },
-    { mode: 'incidents', label: 'Incidents', group: 'work', d: 'M8 2.4 14.2 13H1.8L8 2.4ZM8 6.5v3M8 11.2v.1' },
-    { mode: 'map', label: 'Map', group: 'see', d: 'M4 4.5a1.75 1.75 0 1 0 0-.01M12 3.5a1.75 1.75 0 1 0 0-.01M12 12.5a1.75 1.75 0 1 0 0-.01M5.6 4.9l4.8-1M5.4 5.6l5.2 5.8' },
-    { mode: 'activity', label: 'Activity', group: 'see', d: 'M1.8 8.5h2.7L6.3 3.5l3.2 9 1.9-4h2.8' },
-    { mode: 'repo', label: 'Repository', group: 'see', d: 'M3 3.5A1.5 1.5 0 0 1 4.5 2h7A1.5 1.5 0 0 1 13 3.5V14l-5-2.5L3 14V3.5Z' },
+  const ITEMS: { mode: Mode; label: string; d: string; group: 'main' | 'more' }[] = [
+    { mode: 'now', label: 'Now', group: 'main', d: 'M8 3.2a4.8 4.8 0 1 0 0 9.6 4.8 4.8 0 0 0 0-9.6ZM8 6.2a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6Z' },
+    { mode: 'issues', label: 'Issues', group: 'main', d: 'M8 2.2 13.8 5v3.4c0 3-2.4 4.9-5.8 5.9-3.4-1-5.8-2.9-5.8-5.9V5L8 2.2ZM8 5.4v3.4M8 10.6v.1' },
+    { mode: 'commits', label: 'Commits', group: 'main', d: 'M8 1.8v3.4M8 10.8v3.4M8 5.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6Z' },
+    { mode: 'chat', label: 'Chat', group: 'main', d: 'M2.5 4.2A1.7 1.7 0 0 1 4.2 2.5h7.6a1.7 1.7 0 0 1 1.7 1.7v5a1.7 1.7 0 0 1-1.7 1.7H7l-3 2.6v-2.6h0A1.7 1.7 0 0 1 2.5 9.2v-5ZM5.5 6.7h5' },
+    { mode: 'incidents', label: 'Incidents', group: 'more', d: 'M8 2.4 14.2 13H1.8L8 2.4ZM8 6.5v3M8 11.2v.1' },
+    { mode: 'map', label: 'Map', group: 'more', d: 'M4 4.5a1.75 1.75 0 1 0 0-.01M12 3.5a1.75 1.75 0 1 0 0-.01M12 12.5a1.75 1.75 0 1 0 0-.01M5.6 4.9l4.8-1M5.4 5.6l5.2 5.8' },
+    { mode: 'activity', label: 'Activity', group: 'more', d: 'M1.8 8.5h2.7L6.3 3.5l3.2 9 1.9-4h2.8' },
+    { mode: 'repo', label: 'Repository', group: 'more', d: 'M3 3.5A1.5 1.5 0 0 1 4.5 2h7A1.5 1.5 0 0 1 13 3.5V14l-5-2.5L3 14V3.5Z' },
   ];
-  const shown = (g: 'work' | 'see') => ITEMS.filter((i) => i.group === g && (['now', 'issues', 'commits', 'map', 'chat'].includes(i.mode) || app.menuOn(i.mode)));
+  const shown = (g: 'main' | 'more') => ITEMS.filter((i) => i.group === g && (['now', 'issues', 'commits', 'map', 'chat'].includes(i.mode) || app.menuOn(i.mode)));
+  // The four screens used every day stay in view; the rest sit under More, which opens by itself when one of them is
+  // the screen on show, and remembers being opened.
+  let moreOpen = $state(false);
+  try { moreOpen = localStorage.getItem('codist.railMore') === '1'; } catch { /* storage blocked */ }
+  $effect(() => { try { localStorage.setItem('codist.railMore', moreOpen ? '1' : '0'); } catch { /* storage blocked */ } });
+  const inMore = $derived(ITEMS.some((i) => i.group === 'more' && i.mode === app.mode));
+  const moreShown = $derived(moreOpen || inMore);
   const open = $derived(app.issueList?.issues.filter((i) => i.state === 'open').length ?? 0);
   const analysing = $derived(app.incidents.filter((i) => i.status === 'analysing').length);
   const count = (m: Mode) => (m === 'issues' ? open : m === 'commits' ? live.waiting : m === 'incidents' ? analysing : 0);
@@ -36,20 +43,30 @@
   </div>
   {#if !folded && app.status}<div class="where"><span class="repo">{app.status.repo}</span><span class="mono br">{app.status.branch}</span></div>{/if}
 
-  {#each [['work', 'Work'], ['see', 'See']] as [g, title]}
+  {#snippet item(it: (typeof ITEMS)[number])}
+    {@const n = count(it.mode)}
+    <button class="item" class:on={app.mode === it.mode} aria-current={app.mode === it.mode ? 'page' : undefined} onclick={() => (app.mode = it.mode)} title={folded ? it.label : undefined}>
+      <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d={it.d} /></svg>
+      {#if !folded}<span class="label">{it.label}</span>{/if}
+      {#if it.mode === 'chat' && chat.busy}<i class="thinking" title="The AI is answering"></i>{/if}
+      {#if n}<i class="badge" class:dotonly={folded}>{folded ? '' : n > 99 ? '99+' : n}</i>{/if}
+    </button>
+  {/snippet}
+
+  <div class="group">
+    {#each shown('main') as it}{@render item(it)}{/each}
+  </div>
+  {#if shown('more').length}
+    {@const hidden = shown('more').reduce((s, it) => s + count(it.mode), 0)}
     <div class="group">
-      {#if !folded}<p class="gt">{title}</p>{/if}
-      {#each shown(g as 'work' | 'see') as it}
-        {@const n = count(it.mode)}
-        <button class="item" class:on={app.mode === it.mode} aria-current={app.mode === it.mode ? 'page' : undefined} onclick={() => (app.mode = it.mode)} title={folded ? it.label : undefined}>
-          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d={it.d} /></svg>
-          {#if !folded}<span class="label">{it.label}</span>{/if}
-          {#if it.mode === 'chat' && chat.busy}<i class="thinking" title="The AI is answering"></i>{/if}
-          {#if n}<i class="badge" class:dotonly={folded}>{folded ? '' : n > 99 ? '99+' : n}</i>{/if}
-        </button>
-      {/each}
+      <button class="more" class:open={moreShown} aria-expanded={moreShown} disabled={inMore} onclick={() => (moreOpen = !moreOpen)} title={folded ? (moreShown ? 'Fewer screens' : 'More screens') : undefined}>
+        {#if folded}<svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg>
+        {:else}<span class="chev" aria-hidden="true">›</span><span class="label">More</span>{/if}
+        {#if !moreShown && hidden}<i class="badge" class:dotonly={folded}>{folded ? '' : hidden}</i>{/if}
+      </button>
+      {#if moreShown}{#each shown('more') as it}{@render item(it)}{/each}{/if}
     </div>
-  {/each}
+  {/if}
 
   <div class="foot">
     <button class="ai" onclick={() => (app.mode = 'activity')} title={live.sentence}>
@@ -80,7 +97,13 @@
   .repo { font-size: 12.5px; font-weight: 600; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .br { font-size: 11px; color: var(--accent-text); }
   .group { display: flex; flex-direction: column; gap: 2px; width: 100%; margin-top: 8px; }
-  .gt { margin: 0 0 4px 10px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
+  .more { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: none;
+    color: var(--text-3); font: 600 10.5px var(--font); letter-spacing: 0.08em; text-transform: uppercase; text-align: left; }
+  .more:hover:not(:disabled) { color: var(--text); background: var(--hover); }
+  .more:disabled { cursor: default; }
+  .folded .more { width: 42px; height: 28px; justify-content: center; padding: 0; position: relative; }
+  .chev { display: inline-block; font-size: 14px; transition: transform 0.18s; }
+  .more.open .chev { transform: rotate(90deg); }
   .item { position: relative; display: flex; align-items: center; gap: 11px; width: 100%; height: 36px; padding: 0 10px; border: 0; border-radius: 10px;
     background: none; color: var(--text-2); font: 500 13px var(--font); text-align: left; transition: background 0.15s, color 0.15s, box-shadow 0.15s; }
   .folded .item { width: 42px; justify-content: center; padding: 0; }

@@ -49,6 +49,8 @@ export interface Status {
   behaviour?: boolean; // behaviour runs are on
   model: string;
   llmProblem: string;
+  /** Ollama runs but lacks the model: the page can ask it to download it. */
+  canPull?: boolean;
   graphSource: string;
   graphBuiltAt: number;
   canFix: boolean;
@@ -523,3 +525,13 @@ export interface TeamReport { people: DevProfile[]; teamRate: number }
 export interface ImpactPlace { class: string; method: string; file: string; line: number; depth: number; confirmed: boolean }
 export interface ChangedMethod { class: string; method: string; file: string; line: number; status: 'added' | 'modified' | 'signature' | 'removed'; callers: number; tests: number }
 export interface ImpactReport { sha: string; changed: ChangedMethod[]; callers: ImpactPlace[]; callerCount: number; possible: number; routes: (ImpactPlace & { route: string })[]; tests: ImpactPlace[]; classes: number; untestedRisk: number }
+
+/** The model download, as Ollama reports it. */
+export interface PullState {
+  running: boolean;
+  status: string;
+  completed: number;
+  total: number;
+  error?: string;
+  done: boolean;
+}

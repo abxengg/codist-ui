@@ -1,4 +1,4 @@
-import type { LaneView, LogEntry, FixCheck, CallLink, ImpactReport, Activity, TeamReport, Flags, PeopleReport, HistoryCommit, BranchRef, BranchReport, MemoryItem, MemoryReport, PlannedCommit, RepoReport, FixRef, Working, CommitItem, DependencyReport, Detail, FixProposal, Graph, Incident, IncidentRow, IssueList, RcaReport, ReleaseReport, Status } from './types';
+import type { LaneView, LogEntry, FixCheck, CallLink, ImpactReport, Activity, TeamReport, Flags, PeopleReport, HistoryCommit, BranchRef, BranchReport, MemoryItem, MemoryReport, PlannedCommit, RepoReport, FixRef, Working, CommitItem, DependencyReport, Detail, FixProposal, Graph, Incident, IncidentRow, IssueList, RcaReport, ReleaseReport, Status, PullState } from './types';
 
 const json = (method: string, body?: unknown): RequestInit => ({
   method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body),
@@ -34,6 +34,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   status: () => request<Status>('/status'),
+  pull: () => request<PullState>('/model/pull', { method: 'POST' }),
+  pullState: () => request<PullState>('/model/pull'),
   features: () => request<Flags>('/features'),
   people: () => request<PeopleReport>('/people'),
   team: () => request<TeamReport>('/team'),
