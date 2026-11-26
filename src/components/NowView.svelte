@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from './Skeleton.svelte';
   import ModelPull from './ModelPull.svelte';
   // The home screen. One look answers: what is the AI doing, is anything wrong, and what changed. No clicks needed;
   // every row opens in place.
@@ -63,7 +64,7 @@
     <section class="block panel fl p1">
       <header><h2>Needs your attention</h2><span class="hr">{#if open.length > attention.length}<button class="more" onclick={() => (app.mode = 'issues')}>All {open.length} →</button>{/if}</span></header>
       {#if !app.issueList}
-        <p class="empty">Loading…</p>
+        <Skeleton rows={3} label="Loading issues" />
       {:else if attention.length === 0}
         <div class="calm"><span class="ok"></span><div><b>Nothing serious is open.</b><p>{open.length ? `${open.length} minor note${open.length === 1 ? '' : 's'} in Issues.` : 'Every issue Codist found is closed.'}</p></div></div>
       {:else}

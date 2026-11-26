@@ -109,3 +109,17 @@ export function pill(node: HTMLElement, p: { active: string; bg: string }) {
     },
   };
 }
+
+/** A screen coming in: it rises 6px and fades in, 220ms. The old screen goes at once, so switching never waits.
+ * `still` (for the map, which measures itself on arrival) fades without moving. */
+export function screen(_: Element, p: { still?: boolean } = {}): TransitionConfig {
+  if (still()) return { duration: 0 };
+  return { duration: 220, easing: ease, css: (t, u) => (p.still ? `opacity: ${t}` : `opacity: ${t}; transform: translateY(${6 * u}px)`) };
+}
+
+/** A count that changed: it pops from 0.6 with a small overshoot, 300ms, so the eye notices the new number. */
+export function bump(_: Element): TransitionConfig {
+  if (still()) return { duration: 0 };
+  const spring = (t: number) => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2); // cubic-bezier(0.34, 1.56, 0.64, 1)-like
+  return { duration: 300, css: (t) => `transform: scale(${0.6 + 0.4 * spring(t)})` };
+}

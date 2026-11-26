@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Skeleton from './Skeleton.svelte';
   // Every issue on one page. Filters are a single row of chips; each issue opens in place.
   import { app } from '../lib/store.svelte';
   import { groups } from '../lib/groups';
@@ -64,7 +65,7 @@
     </div>
   {/if}
   {#if !app.issueList}
-    <p class="empty">Loading…</p>
+    <Skeleton rows={5} label="Loading issues" />
   {:else if !shown.length}
     <div class="none"><b>{q || sev || app.foundBy ? 'Nothing matches.' : view === "open" ? "No open issues." : "Nothing here."}</b></div>
   {:else if layout === 'board'}

@@ -5,6 +5,7 @@
   import { app, setTheme } from '../lib/store.svelte';
   import { live } from '../lib/live.svelte';
   import Orb from './Orb.svelte';
+  import { bump, pill } from '../lib/motion';
   import Logo from './Logo.svelte';
   import type { Mode } from '../lib/types';
 
@@ -49,16 +50,16 @@
       <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d={it.d} /></svg>
       {#if !folded}<span class="label">{it.label}</span>{/if}
       {#if it.mode === 'chat' && chat.busy}<i class="thinking" title="The AI is answering"></i>{/if}
-      {#if n}<i class="badge" class:dotonly={folded}>{folded ? '' : n > 99 ? '99+' : n}</i>{/if}
+      {#if n}{#key n}<i class="badge" class:dotonly={folded} in:bump>{folded ? '' : n > 99 ? '99+' : n}</i>{/key}{/if}
     </button>
   {/snippet}
 
-  <div class="group">
+  <div class="group" use:pill={{ active: '.item.on', bg: 'var(--surface-3)' }}>
     {#each shown('main') as it}{@render item(it)}{/each}
   </div>
   {#if shown('more').length}
     {@const hidden = shown('more').reduce((s, it) => s + count(it.mode), 0)}
-    <div class="group">
+    <div class="group" use:pill={{ active: '.item.on', bg: 'var(--surface-3)' }}>
       <button class="more" class:open={moreShown} aria-expanded={moreShown} disabled={inMore} onclick={() => (moreOpen = !moreOpen)} title={folded ? (moreShown ? 'Fewer screens' : 'More screens') : undefined}>
         {#if folded}<svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg>
         {:else}<span class="chev" aria-hidden="true">›</span><span class="label">More</span>{/if}
@@ -105,7 +106,10 @@
   .chev { display: inline-block; font-size: 14px; transition: transform 0.18s; }
   .more.open .chev { transform: rotate(90deg); }
   .item { position: relative; display: flex; align-items: center; gap: 11px; width: 100%; height: 36px; padding: 0 10px; border: 0; border-radius: 10px;
-    background: none; color: var(--text-2); font: 500 13px var(--font); text-align: left; transition: background 0.15s, color 0.15s, box-shadow 0.15s; }
+    background: none; color: var(--text-2); font: 500 13px var(--font); text-align: left; transition: background 0.15s, color 0.15s, box-shadow 0.15s, transform 120ms var(--t-ease); }
+  .item:active { transform: scale(0.97); }
+  .item svg { transition: color 0.15s, transform 200ms var(--t-ease); }
+  .item:hover svg { transform: translateX(1px); }
   .folded .item { width: 42px; justify-content: center; padding: 0; }
   .item:hover { background: var(--hover); color: var(--text); }
   .item.on { color: var(--text); background: var(--surface-3); box-shadow: inset 0 1px 0 var(--edge), 0 2px 0 rgba(0, 0, 0, 0.4), 0 6px 14px -6px rgba(0, 0, 0, 0.6), var(--glow); }

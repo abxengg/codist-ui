@@ -2,6 +2,7 @@
   import AIStrip from './components/AIStrip.svelte';
   import ChatView from './components/ChatView.svelte';
   import { onMount } from 'svelte';
+  import { screen } from './lib/motion';
   import { app, boot, savePref, saveStr, selectCommit } from './lib/store.svelte';
   import { preload } from './lib/highlight';
   import TopBar from './components/TopBar.svelte';
@@ -134,54 +135,58 @@
       · fixes are paused until it is finished or aborted.
     </div>
   {/if}
-  {#if app.mode === 'now'}
-    <NowView />
-  {:else if app.mode === 'issues'}
-    <IssuesView />
-  {:else if app.mode === 'commits'}
-    <CommitsView />
-  {:else if app.mode === 'map'}
-    <LiveGraph />
-  {:else if app.mode === 'graph'}
-    <StructureView />
-  {:else if app.mode === 'incidents'}
-    <IncidentsView />
-  {:else if app.mode === 'repo'}
-    <!-- It describes the followed branch, so it loads again when that changes. -->
-    {#key app.status?.branch}<RepoView />{/key}
-  {:else if app.mode === 'chat'}
-    <ChatView />
-  {:else if app.mode === 'activity'}
-    <ActivityView />
-  {:else}
-  <main
-    class="layout"
-    class:dragging={dragging !== null}
-    class:no-side={!app.showCommits}
-    class:no-panel={!app.showPanel}
-  >
-    {#if app.showCommits}
-      <LeftDock />
-      <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-      <div class="resizer" role="separator" aria-orientation="vertical" aria-label="Resize the commits panel" tabindex="0" onpointerdown={(e) => startResize('side', e)} onpointermove={resize} onpointerup={() => (dragging = null)} onkeydown={(e) => resizeKey('side', e)}></div>
-    {/if}
-    {#if app.mode === 'review'}
-      <DiffReview />
+  {#key app.mode}
+  <div class="screen" in:screen={{ still: app.mode === 'map' }}>
+    {#if app.mode === 'now'}
+      <NowView />
+    {:else if app.mode === 'issues'}
+      <IssuesView />
+    {:else if app.mode === 'commits'}
+      <CommitsView />
+    {:else if app.mode === 'map'}
+      <LiveGraph />
+    {:else if app.mode === 'graph'}
+      <StructureView />
+    {:else if app.mode === 'incidents'}
+      <IncidentsView />
+    {:else if app.mode === 'repo'}
+      <!-- It describes the followed branch, so it loads again when that changes. -->
+      {#key app.status?.branch}<RepoView />{/key}
+    {:else if app.mode === 'chat'}
+      <ChatView />
+    {:else if app.mode === 'activity'}
+      <ActivityView />
     {:else}
-      <!-- The graph library is large, so it loads only when this screen opens. -->
-      {#await import('./components/GraphView.svelte')}
-        <div class="empty">Loading the graph</div>
-      {:then { default: GraphView }}
-        <GraphView />
-      {/await}
+    <main
+      class="layout"
+      class:dragging={dragging !== null}
+      class:no-side={!app.showCommits}
+      class:no-panel={!app.showPanel}
+    >
+      {#if app.showCommits}
+        <LeftDock />
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+        <div class="resizer" role="separator" aria-orientation="vertical" aria-label="Resize the commits panel" tabindex="0" onpointerdown={(e) => startResize('side', e)} onpointermove={resize} onpointerup={() => (dragging = null)} onkeydown={(e) => resizeKey('side', e)}></div>
+      {/if}
+      {#if app.mode === 'review'}
+        <DiffReview />
+      {:else}
+        <!-- The graph library is large, so it loads only when this screen opens. -->
+        {#await import('./components/GraphView.svelte')}
+          <div class="empty">Loading the graph</div>
+        {:then { default: GraphView }}
+          <GraphView />
+        {/await}
+      {/if}
+      {#if app.showPanel}
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+        <div class="resizer" role="separator" aria-orientation="vertical" aria-label="Resize the details panel" tabindex="0" onpointerdown={(e) => startResize('panel', e)} onpointermove={resize} onpointerup={() => (dragging = null)} onkeydown={(e) => resizeKey('panel', e)}></div>
+        <Panel />
+      {/if}
+    </main>
     {/if}
-    {#if app.showPanel}
-      <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-      <div class="resizer" role="separator" aria-orientation="vertical" aria-label="Resize the details panel" tabindex="0" onpointerdown={(e) => startResize('panel', e)} onpointermove={resize} onpointerup={() => (dragging = null)} onkeydown={(e) => resizeKey('panel', e)}></div>
-      <Panel />
-    {/if}
-  </main>
-  {/if}
+  </div>
+  {/key}
 </div>
 </div>
 
@@ -204,6 +209,8 @@
   @media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }
   .window { position: relative; z-index: 1; height: 100%; display: flex; }
   .shell { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; }
+  /* Each screen fills what is left of the shell, as the screens themselves did before. */
+  .screen { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
   .op { padding: 7px 16px; font-size: 12.5px; color: var(--text); background: color-mix(in srgb, var(--warn) 14%, var(--surface)); border-bottom: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }
   .op .mono { font-size: 11.5px; }
   .layout {

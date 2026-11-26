@@ -6,6 +6,7 @@ export interface Toast {
   id: number;
   text: string;
   tone: 'info' | 'good' | 'warn' | 'bad';
+  ms: number;
 }
 
 export type Theme = 'light' | 'dark';
@@ -298,10 +299,36 @@ export function setTheme(t: Theme) {
 document.documentElement.dataset.theme = app.theme;
 
 let toastId = 0;
+// Each toast's timer, so pointing at a toast holds it and clicking it sends it away.
+const toastTimers = new Map<number, { left: number; started: number; timer?: ReturnType<typeof setTimeout> }>();
+
 export function toast(text: string, tone: Toast['tone'] = 'info', ms = 4000) {
   const id = ++toastId;
-  app.toasts = [...app.toasts, { id, text, tone }];
-  setTimeout(() => (app.toasts = app.toasts.filter((t) => t.id !== id)), ms);
+  app.toasts = [...app.toasts, { id, text, tone, ms }];
+  toastTimers.set(id, { left: ms, started: Date.now() });
+  resumeToast(id);
+}
+
+export function dismissToast(id: number) {
+  clearTimeout(toastTimers.get(id)?.timer);
+  toastTimers.delete(id);
+  app.toasts = app.toasts.filter((t) => t.id !== id);
+}
+
+/** Holds a toast while the pointer is on it. */
+export function holdToast(id: number) {
+  const t = toastTimers.get(id);
+  if (!t?.timer) return;
+  clearTimeout(t.timer);
+  t.timer = undefined;
+  t.left -= Date.now() - t.started;
+}
+
+export function resumeToast(id: number) {
+  const t = toastTimers.get(id);
+  if (!t || t.timer) return;
+  t.started = Date.now();
+  t.timer = setTimeout(() => dismissToast(id), Math.max(800, t.left));
 }
 
 /** Reads features.json and moves away from anything that was just turned off. */
