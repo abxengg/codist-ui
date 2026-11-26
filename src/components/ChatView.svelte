@@ -18,6 +18,8 @@
   let list = $state<HTMLDivElement>();
   let input = $state<HTMLTextAreaElement>();
   const offline = $derived(!!app.status?.llmProblem);
+  // While another job holds the model (a review, an incident), the answer waits for it; say which.
+  const waitingFor = $derived(live.call?.status === 'running' && live.call.kind !== 'chat' ? live.sentence.charAt(0).toLowerCase() + live.sentence.slice(1) : '');
 
   async function send(q = text) {
     if (!q.trim() || busy) return;
@@ -120,7 +122,7 @@
     {#if busy}
       <div class="row ai" in:fade={{ duration: 200 }}>
         <span class="who"><Orb mood="reading" size={26} label="Thinking" /></span>
-        <div class="answer thinking"><span class="dots"><i></i><i></i><i></i></span>{live.call?.status === 'running' ? live.sentence : 'Reading the code'}…</div>
+        <div class="answer thinking"><span class="dots"><i></i><i></i><i></i></span>{waitingFor ? `Waiting for the AI to finish: ${waitingFor}` : 'Reading the code'}…</div>
       </div>
     {/if}
   </div>
