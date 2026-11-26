@@ -13,8 +13,9 @@ export function cancelAI() {
   aiAbort = null;
 }
 
+// A request may bring its own abort signal: each fix has one, so stopping one fix stops only its model call.
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  if (AI_PATH.test(path) && init?.method === 'POST') {
+  if (AI_PATH.test(path) && init?.method === 'POST' && !init.signal) {
     aiAbort ??= new AbortController();
     init = { ...init, signal: aiAbort.signal };
   }
@@ -68,8 +69,8 @@ export const api = {
   review: (sha: string) => request<{ sha: string; queued: boolean }>(`/commits/${sha}/review`, { method: 'POST' }),
   reviewFile: (sha: string, path: string) => request<{ sha: string; queued: boolean }>(`/commits/${sha}/review?file=${encodeURIComponent(path)}`, { method: 'POST' }),
   behaviour: (sha: string) => request<{ sha: string; queued: boolean }>(`/commits/${sha}/behaviour`, { method: 'POST' }),
-  proposeFix: (body: { sha: string; path: string; line: number; title: string; guidance?: string; also?: FixRef[] }) =>
-    request<FixProposal & { blocked?: boolean; error?: string }>('/fix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  proposeFix: (body: { sha: string; path: string; line: number; title: string; guidance?: string; also?: FixRef[] }, signal?: AbortSignal) =>
+    request<FixProposal & { blocked?: boolean; error?: string }>('/fix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal }),
   checkFix: (id: string) => request<FixCheck>(`/fix/${id}/check`, { method: 'POST' }),
   applyFix: (id: string, message: string) =>
     request<{ commit: string }>(`/fix/${id}/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) }),

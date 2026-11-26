@@ -96,7 +96,7 @@ class AppState {
 
   /** The fix dialog: generating, showing a proposal for approval, or an error. */
   fix = $state.raw<{ finding: FindingWithPath; sha: string; busy: 'generating' | 'applying' | null; proposal: FixProposal | null; error: string | null;
-    started?: number; done?: string; issues?: Issue[] } | null>(null);
+    started?: number; done?: string; issues?: Issue[]; abort?: AbortController } | null>(null);
   /** Fixes waiting in the background while another is on screen: still being prepared, ready to review, or failed. */
   fixQueue = $state.raw<NonNullable<AppState['fix']>[]>([]);
   /** The new screens show an opened file over the page rather than in a side panel. */
@@ -624,6 +624,7 @@ export function showQueuedFix(i: number) {
 /** Drops a fix from the queue; a proposal it already made is thrown away. */
 export function dropQueuedFix(i: number) {
   const f = app.fixQueue[i];
+  if (f?.busy === 'generating') f.abort?.abort(); // stops this fix's model call only
   if (f?.proposal) void api.discardFix(f.proposal.id);
   app.fixQueue = app.fixQueue.filter((_, k) => k !== i);
 }
@@ -633,12 +634,15 @@ export async function proposeFix(finding: FindingWithPath, fromSha?: string, als
   if (!sha) return;
   // A fix already on screen or being prepared is not lost: it waits in the background with its own bubble.
   parkFix();
-  app.fix = { finding, sha, busy: 'generating', proposal: null, error: null, started: Date.now(), issues };
+  // This fix's own abort switch: stopping it stops only its model call, not another fix being prepared.
+  const abort = new AbortController();
+  app.fix = { finding, sha, busy: 'generating', proposal: null, error: null, started: Date.now(), issues, abort };
   app.fixHidden = false;
   try {
-    const proposal = await api.proposeFix({ sha, path: finding.path, line: finding.line, title: finding.title, also });
+    const proposal = await api.proposeFix({ sha, path: finding.path, line: finding.line, title: finding.title, also }, abort.signal);
     updateFix(finding, { busy: null, proposal });
   } catch (e) {
+    if ((e as Error).name === 'AbortError') return; // stopped on purpose: the fix is already gone
     updateFix(finding, { busy: null, error: (e as Error).message });
   }
 }
@@ -718,7 +722,9 @@ export async function openIncident(id: string | null) {
 
 export function closeFix() {
   if (app.fix?.busy === 'generating') toast('Cancelled: the model has stopped working on this fix', 'info', 3000);
-  cancelAI(); // still generating: stop the model
+  // Still generating: stop the model on this fix only. A fix without its own switch falls back to stopping all.
+  if (app.fix?.abort) app.fix.abort.abort();
+  else cancelAI();
   const id = app.fix?.proposal?.id;
   if (id) void api.discardFix(id);
   app.fix = null;
