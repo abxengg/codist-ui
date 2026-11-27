@@ -4,9 +4,16 @@ The interface of [Codist](https://github.com/abxengg/codist), in Svelte 5. The b
 embedded by the Go package in this repository, so the Codist binary carries the interface and building Codist needs
 no Node.
 
-Screens: **Review** (commits, diffs with findings beside the lines, how Codist decided each one, the files the model
-read), **Issues** (every open issue, filtered by type, urgency, change and who found it: the AI model or the code
-checks), **Graph**, **Repository**, **Incidents** and **Activity**.
+Screens, as the sidebar lists them: **Now** (what the AI is doing, what needs attention, what changed, and a
+**Download it** button when Ollama lacks the model), **Issues** (every open issue, filtered by type, urgency, change
+and who found it: the AI model or the code checks), **Commits** (the branch graph, three dots per commit for checks,
+AI and behaviour runs, and each commit on a stage with its diff, findings and how Codist decided each one) and
+**Chat** (questions about the codebase, answered with the files and lines used). Under **More**: **Incidents**,
+**Map** (services in hexagons, classes and methods, Feign calls), **Activity** and **Repository**.
+
+Motion follows one clock (`src/lib/motion.ts`): screens fade and rise in over 220 ms, the sidebar highlight slides,
+counts pop when they change, toasts can be held by pointing and dismissed by clicking, and lists show placeholder
+cards while loading. All of it stops when the system asks for less motion.
 
 ```bash
 npm install
