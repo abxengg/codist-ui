@@ -296,7 +296,8 @@
             <div class="note n-check float f3 {check === 'running' ? 'running' : check.status}" in:fly|global={{ x: -28, duration: 340, delay: 180, ...ease }} out:fly|global={{ x: -20, duration: 200 }}>
               <h3>Built and tested</h3>
               {#if check === 'running'}<p><span class="spin"></span>Compiling and running the tests in a separate copy. You can decide now.</p>
-              {:else if check.status === 'passed'}<p class="ok">Compiles, and the tests pass. {Math.round(check.tookMs / 1000)} s.</p>
+              {:else if check.status === 'passed' && check.step === 'tests' && check.tests === 0}<p>Compiles. There are no tests here, so nothing checked what the change does. {Math.round(check.tookMs / 1000)} s.</p>
+              {:else if check.status === 'passed'}<p class="ok">Compiles, and {check.tests ? `all ${check.tests} tests pass` : 'the tests pass'}. {Math.round(check.tookMs / 1000)} s.</p>
               {:else if check.status === 'failed'}<p class="bad">{check.step === 'tests' ? 'Compiles, but tests fail.' : 'Does not compile.'}</p>{#if check.output}<pre>{check.output}</pre>{/if}
               {:else}<p>Could not check it. {check.output}</p>{/if}
             </div>
@@ -331,11 +332,14 @@
                 <button class="b3 primary" disabled={!!f.busy} onclick={tryAgain}>Try again</button>
                 <button class="b3" disabled={!!f.busy || (!f.proposal.working && !message.trim())} onclick={() => applyFix(message)}>{f.busy === 'applying' ? 'Applying…' : 'Commit anyway'}</button>
               {:else}
+                {#if f.proposal.newProblems?.length}
+                  <div class="broken">Codist's checks find {f.proposal.newProblems.length === 1 ? 'a new problem' : `${f.proposal.newProblems.length} new problems`} in this change:<ul>{#each f.proposal.newProblems as np (np)}<li>{np}</li>{/each}</ul></div>
+                {/if}
                 <button class="b3 primary" disabled={!!f.busy || (!f.proposal.working && !message.trim())} onclick={() => applyFix(message)}>
                   {f.busy === 'applying' ? 'Applying…' : f.proposal.working ? 'Apply' : 'Apply and commit'}
                 </button>
               {/if}
-              {#if (f.proposal.tries ?? 1) > 1 && !broken}<p class="tries">Took {f.proposal.tries} tries: the AI's earlier change did not compile, so it was given the compiler's errors.</p>{/if}
+              {#if (f.proposal.tries ?? 1) > 1 && !broken}<p class="tries">Took {f.proposal.tries} tries: the AI's earlier change did not compile or brought a new problem, so it was told what was wrong.</p>{/if}
               <button class="b3" disabled={f.busy === 'applying'} onclick={() => (rejecting = true)}>Reject…</button>
               <p class="keys">{broken ? 'Esc to discard' : `⌘↵ to ${f.proposal.working ? 'apply' : 'commit'} · Esc to discard`}</p>
             {/if}
@@ -409,6 +413,7 @@
   .ok { color: var(--good) !important; } .bad { color: var(--bad) !important; }
   .n-check.passed { border-color: color-mix(in srgb, var(--good) 45%, var(--border)); box-shadow: var(--elev-2), 0 0 40px -16px color-mix(in srgb, var(--good) 60%, transparent); }
   .broken { margin: 0 0 4px; font-size: 12.5px; line-height: 1.5; color: var(--bad); }
+  div.broken ul { margin: 4px 0 0; padding-left: 18px; }
   .tries { margin: 4px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--text-3); }
   .n-check.failed { border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
   .warnc { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }

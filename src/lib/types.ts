@@ -18,6 +18,8 @@ export interface FixProposal {
   tries?: number;
   /** The last try still did not compile. */
   buildFailed?: boolean;
+  /** What Codist's exact checks find in the fixed code that was not there before, after the last try. */
+  newProblems?: string[];
 }
 
 /** Instant rule checks on the uncommitted changes in the working tree. */
@@ -454,7 +456,7 @@ export interface ReleaseReport {
 
 export interface DepRow { group: string; artifact: string; version: string; scope: string; managed: boolean; status: 'ok' | 'unknown' | 'warn' | 'bad'; note: string; modules?: string[] }
 
-export interface FixCheck { status: 'passed' | 'failed' | 'unavailable'; step: string; output?: string; tookMs: number }
+export interface FixCheck { status: 'passed' | 'failed' | 'unavailable'; step: string; output?: string; tookMs: number; /** Tests that ran; 0 after the tests step means only the build was checked. */ tests?: number }
 
 export interface DependencyReport { tool: string; java: string; springBoot: string; support: string; deps: DepRow[]; findings: Finding[]; file: string }
 
